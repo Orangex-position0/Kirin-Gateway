@@ -1,0 +1,16 @@
+/target
+
+# IDE
+.idea/
+
+# Claude Code
+.claude/
+
+# 测试配置文件
+config_test_*.yaml
+
+# OpenSpec
+openspec/
+
+# 代码面试报告
+code-interview-report-*.md

@@ -1,0 +1,131 @@
+# Kirin Gateway 配置文件模板
+# 复制此文件为 config.yaml 并根据实际环境修改
+
+# ============================================================
+# 服务监听配置
+# ============================================================
+server:
+  # 网关监听地址，格式为 "ip:port"
+  # - "0.0.0.0:6188" 表示监听所有网卡的 6188 端口
+  # - "127.0.0.1:6188" 表示仅监听本地回环地址
+  listen: "0.0.0.0:6188"
+
+  # 工作线程数（可选）
+  # - 未设置时由运行时自动决定（通常等于 CPU 核心数）
+  # - 建议在生产环境中根据负载情况手动配置
+  threads: 2
+
+# ============================================================
+# 管理 API 配置（可选，整节可删除以禁用）
+# ============================================================
+# 提供运行时配置管理、健康检查等管理接口
+admin:
+  # 管理 API 监听地址
+  listen: "0.0.0.0:6189"
+
+# ============================================================
+# 路由规则配置
+# ============================================================
+# 路由按配置顺序从上到下匹配，第一个匹配成功的规则生效
+# 支持两种匹配模式（互斥，每条路由只能选一种）：
+#   - path:        精确路径匹配，如 "/api/users" 只匹配该路径
+#   - path_prefix: 路径前缀匹配，如 "/api/orders" 匹配所有以该前缀开头的路径
+routes:
+  # 精确路径匹配示例
+  - route_id: "user-route"
+    path: /api/users
+    match_type: exact
+    upstream: user-service
+    applicant: "developer"
+    applied_at: "2026-04-22T00:00:00+08:00"
+    description: "用户服务接口"
+
+  # 路径前缀匹配示例
+  - route_id: "order-route"
+    path_prefix: /api/orders
+    match_type: prefix
+    upstream: order-service
+    applicant: "developer"
+    applied_at: "2026-04-22T00:00:00+08:00"
+    description: "订单服务接口"
+
+  # 兜底路由：匹配所有未命中上方规则的 /api 请求
+  - route_id: "default-route"
+    path_prefix: /api
+    match_type: prefix
+    upstream: default-service
+    applicant: "developer"
+    applied_at: "2026-04-22T00:00:00+08:00"
+    description: "默认兜底路由"
+
+  # 正则匹配示例（可选，需要认证）
+  # - route_id: "admin-route"
+  #   path: "/api/admin/.*"
+  #   match_type: regex
+  #   methods: ["GET", "POST"]
+  #   upstream: admin-service
+  #   is_auth: true
+  #   applicant: "developer"
+  #   applied_at: "2026-04-22T00:00:00+08:00"
+  #   description: "管理后台接口"
+
+# ============================================================
+# 上游服务配置
+# ============================================================
+# key 为服务名称，与 routes 中的 upstream 字段对应
+# 每个上游服务包含一组后端节点，网关在节点间进行负载均衡
+upstreams:
+  # 单节点示例
+  user-service:
+    nodes:
+      - addr: "127.0.0.1:8081"
+        weight: 1
+
+  # 多节点示例（权重相同，轮询分配）
+  order-service:
+    nodes:
+      - addr: "127.0.0.1:8082"
+        weight: 1
+      - addr: "127.0.0.1:8083"
+        weight: 1
+
+  # 权重示例：第一个节点获得 3/5 的流量，第二个获得 2/5
+  # default-service:
+  #   nodes:
+  #     - addr: "192.168.1.10:8090"
+  #       weight: 3
+  #     - addr: "192.168.1.11:8090"
+  #       weight: 2
+
+  default-service:
+    nodes:
+      - addr: "127.0.0.1:8090"
+        weight: 1
+
+# ============================================================
+# 限流配置（可选，整节可删除以禁用限流）
+# ============================================================
+# 基于令牌桶算法控制请求速率
+rate_limit:
+  # 令牌桶容量，即允许的最大突发请求数
+  # - 值越大，短时间内能通过的并发请求越多
+  capacity: 100
+
+  # 令牌填充速率（每秒补充的令牌数）
+  # - 控制平均请求通过速率
+  # - 例如设为 10，则平均每秒允许 10 个请求
+  refill_rate: 10
+
+# ============================================================
+# JWT 认证配置（可选，整节可删除以禁用）
+# ============================================================
+# 启用后，标记了 is_auth: true 的路由将要求请求携带有效的 JWT Token
+# auth:
+#   # 签名算法，当前仅支持 RS256
+#   algorithm: "RS256"
+#   # RSA 公钥文件路径（PEM 格式）
+#   public_key_path: "/path/to/public.pem"
+#   # 期望的 Token 签发者（iss 字段）
+#   issuer: "your-issuer"
+#   # 需要透传给上游服务的 JWT claims（会以 X-User-{ClaimName} 头传递）
+#   claims_to_forward: ["sub", "exp"]

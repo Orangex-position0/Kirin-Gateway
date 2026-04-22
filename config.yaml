@@ -1,0 +1,36 @@
+# Kirin Gateway Configuration file
+
+server:
+  listen: "0.0.0.0:6188"
+  threads: 2
+  
+admin:
+  listen: "0.0.0.0:6189"
+
+routes:
+  - path: /api/users
+    upstream: user-service
+  - path_prefix: /api/orders
+    upstream: order-service
+  - path_prefix: /api
+    upstream: default-service
+
+upstreams:
+  user-service:
+    nodes:
+      - addr: "127.0.0.1:8081"
+        weight: 1
+  order-service:
+    nodes:
+      - addr: "127.0.0.1:8082"
+        weight: 1
+      - addr: "127.0.0.1:8083"
+        weight: 1
+  default-service:
+    nodes:
+      - addr: "127.0.0.1:8090"
+        weight: 1
+
+rate_limit:
+  capacity: 100
+  refill_rate: 10

@@ -1,0 +1,131 @@
+# Kirin Gateway Configuration Template
+# Copy this file to config.yaml and modify according to your environment
+
+# ============================================================
+# Server Settings
+# ============================================================
+server:
+  # Gateway listen address, format: "ip:port"
+  # - "0.0.0.0:6188" listens on all interfaces on port 6188
+  # - "127.0.0.1:6188" listens on localhost only
+  listen: "0.0.0.0:6188"
+
+  # Worker thread count (optional)
+  # - Defaults to the number of CPU cores when not set
+  # - Recommended to tune manually in production based on load
+  threads: 2
+
+# ============================================================
+# Admin API Settings (optional — remove this section to disable)
+# ============================================================
+# Provides a management API for runtime configuration, health checks, etc.
+admin:
+  # Admin API listen address
+  listen: "0.0.0.0:6189"
+
+# ============================================================
+# Route Rules
+# ============================================================
+# Routes are matched top-to-bottom; the first matching rule wins.
+# Two mutually exclusive matching modes per route:
+#   - path:        Exact path match, e.g. "/api/users" matches only that path
+#   - path_prefix: Prefix match, e.g. "/api/orders" matches all paths starting with it
+routes:
+  # Exact path match example
+  - route_id: "user-route"
+    path: /api/users
+    match_type: exact
+    upstream: user-service
+    applicant: "developer"
+    applied_at: "2026-04-22T00:00:00+08:00"
+    description: "User service endpoint"
+
+  # Prefix match example
+  - route_id: "order-route"
+    path_prefix: /api/orders
+    match_type: prefix
+    upstream: order-service
+    applicant: "developer"
+    applied_at: "2026-04-22T00:00:00+08:00"
+    description: "Order service endpoint"
+
+  # Fallback route: catches any /api request not matched above
+  - route_id: "default-route"
+    path_prefix: /api
+    match_type: prefix
+    upstream: default-service
+    applicant: "developer"
+    applied_at: "2026-04-22T00:00:00+08:00"
+    description: "Default fallback route"
+
+  # Regex match example (optional, requires auth)
+  # - route_id: "admin-route"
+  #   path: "/api/admin/.*"
+  #   match_type: regex
+  #   methods: ["GET", "POST"]
+  #   upstream: admin-service
+  #   is_auth: true
+  #   applicant: "developer"
+  #   applied_at: "2026-04-22T00:00:00+08:00"
+  #   description: "Admin panel endpoint"
+
+# ============================================================
+# Upstream Services
+# ============================================================
+# Key is the service name referenced by routes' "upstream" field.
+# Each upstream contains a set of backend nodes; the gateway load-balances across them.
+upstreams:
+  # Single-node example
+  user-service:
+    nodes:
+      - addr: "127.0.0.1:8081"
+        weight: 1
+
+  # Multi-node example (equal weights, round-robin distribution)
+  order-service:
+    nodes:
+      - addr: "127.0.0.1:8082"
+        weight: 1
+      - addr: "127.0.0.1:8083"
+        weight: 1
+
+  # Weighted example: first node gets 3/5 of traffic, second gets 2/5
+  # default-service:
+  #   nodes:
+  #     - addr: "192.168.1.10:8090"
+  #       weight: 3
+  #     - addr: "192.168.1.11:8090"
+  #       weight: 2
+
+  default-service:
+    nodes:
+      - addr: "127.0.0.1:8090"
+        weight: 1
+
+# ============================================================
+# Rate Limiting (optional — remove this section to disable)
+# ============================================================
+# Token-bucket algorithm for request rate control
+rate_limit:
+  # Bucket capacity — maximum burst size allowed
+  # - Higher values permit more concurrent requests in a short window
+  capacity: 100
+
+  # Token refill rate — tokens added per second
+  # - Controls the average throughput
+  # - e.g. 10 means an average of 10 requests per second
+  refill_rate: 10
+
+# ============================================================
+# JWT Authentication (optional — remove this section to disable)
+# ============================================================
+# When enabled, routes with is_auth: true require a valid JWT token
+# auth:
+#   # Signing algorithm, currently only RS256 is supported
+#   algorithm: "RS256"
+#   # RSA public key file path (PEM format)
+#   public_key_path: "/path/to/public.pem"
+#   # Expected token issuer (iss claim)
+#   issuer: "your-issuer"
+#   # JWT claims to forward to upstream (passed as X-User-{ClaimName} header)
+#   claims_to_forward: ["sub", "exp"]
