@@ -1,10 +1,10 @@
+#![allow(dead_code)]
+
 use crate::data_plane::router::{MatchType, RouteRule};
 use serde::Serialize;
 
-/// DTO used by admin api
-
 /// 限流配置概要 DTO (used by Admin API)
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct RateLimitDTO {
     // 是否启用限流
     pub enabled: bool,

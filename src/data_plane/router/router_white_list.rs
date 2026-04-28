@@ -1,9 +1,8 @@
+#![allow(dead_code)]
+
 use crate::data_plane::router::MatchType;
 use regex::Regex;
 use std::collections::HashMap;
-
-/// white list of router
-/// used to check whether the router is allowed to be accessed
 
 /// 接口注册条目
 pub struct RouteEntry {
@@ -64,12 +63,11 @@ impl RouteRegistry {
 
         // regex match
         for entry in self.registered_routes.values() {
-            if entry.match_type == MatchType::Regex {
-                if let Ok(re) = Regex::new(&entry.path) {
-                    if re.is_match(path) {
-                        return Some(entry.route_id.clone());
-                    }
-                }
+            if entry.match_type == MatchType::Regex
+                && let Ok(re) = Regex::new(&entry.path)
+                && re.is_match(path)
+            {
+                return Some(entry.route_id.clone());
             }
         }
 

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod auth;
 pub mod header;
 pub mod logging;
@@ -238,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_filter_chain_len() {
-        let mut chain = FilterChain::new();
+        let chain = FilterChain::new();
         assert!(chain.is_empty());
         assert_eq!(chain.len(), 0);
     }

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::control_plane::admin_api::dto::RateLimitDTO;
 use log::warn;
 use std::collections::HashMap;
@@ -6,7 +8,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 /// 限流功能
-
 pub struct RateLimiter {
     /// 是否启用限流
     enabled: bool,

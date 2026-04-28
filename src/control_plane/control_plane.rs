@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config;
 use crate::config::parse_config;
 use crate::control_plane::gateway_state::GatewayState;
@@ -7,8 +9,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
 use std::time::Duration;
-
-/// Control plane of gateway
 
 /// 控制面模块
 /// 负载配置加载、校验、状态构建和配置热重载
@@ -46,7 +46,7 @@ impl ControlPlane {
             .write()
             .map_err(|e| format!("获取写锁失败: {}", e))?;
 
-        if let (Some(ref _new_rl), Some(ref _old_rl)) =
+        if let (Some(_new_rl), Some(_old_rl)) =
             (new_state.rate_limiter(), old_rate_limiter.as_ref())
         {
             let _summary = _new_rl.summary();
@@ -118,13 +118,7 @@ impl ControlPlane {
             info!("开始监听配置文件变化: {}", config_path);
 
             // 事件循环：去抖动处理
-            loop {
-                // 等待第一个事件
-                match rx.recv() {
-                    Ok(_) => {},
-                    Err(_) => break, // channel 关闭
-                }
-
+            while rx.recv().is_ok() {
                 // 去抖动：等待一段时间，如果没有新事件才执行重载
                 loop {
                     thread::sleep(debounce_interval);

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::control_plane::admin_api::dto::RouteDTO;
 use regex::Regex;
 use std::collections::HashMap;
@@ -202,7 +204,7 @@ impl Router {
     pub fn routes_summary(&self) -> Vec<RouteDTO> {
         let mut summaries = Vec::new();
 
-        for (_, rule) in &self.exact_routes {
+        for rule in self.exact_routes.values() {
             summaries.push(RouteDTO::from_rule(rule, MatchType::Exact));
         }
         for (_, rule) in &self.regex_routes {

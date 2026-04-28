@@ -1,8 +1,8 @@
+#![allow(dead_code)]
+
 use jsonwebtoken::DecodingKey;
 use serde::Deserialize;
 use std::fs;
-
-/// Configuration for the gateway
 
 /// 网关全局配置
 ///

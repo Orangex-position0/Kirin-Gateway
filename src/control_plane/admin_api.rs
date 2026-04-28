@@ -1,4 +1,4 @@
-use crate::control_plane::admin_api::dto::{RateLimitDTO, RouteDTO, UpstreamDTO};
+use crate::control_plane::admin_api::dto::UpstreamDTO;
 use crate::control_plane::control_plane::ControlPlane;
 use crate::control_plane::gateway_state::GatewayState;
 use async_trait::async_trait;
@@ -7,7 +7,7 @@ use pingora_core::prelude::HttpPeer;
 use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
 use serde::Serialize;
-use std::sync::{Arc, LockResult, RwLock};
+use std::sync::{Arc, RwLock};
 
 pub mod dto;
 
@@ -137,11 +137,7 @@ impl AdminProxy {
     /// 获取当前限流配置
     fn handle_rate_limit(&self) -> (u16, String) {
         self.with_state(|state| {
-            let dto = state.rate_limit_summary().unwrap_or_else(|| RateLimitDTO {
-                enabled: false,
-                capacity: None,
-                refill_rate: None,
-            });
+            let dto = state.rate_limit_summary().unwrap_or_default();
             build_ok_response(dto)
         })
     }

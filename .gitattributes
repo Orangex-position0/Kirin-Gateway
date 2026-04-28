@@ -1,0 +1,5 @@
+# Rust 源码统一使用 LF 换行符，与 rustfmt.toml newline_style = "Unix" 保持一致
+*.rs text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf

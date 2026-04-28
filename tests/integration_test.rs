@@ -391,6 +391,7 @@ fn test_route_to_correct_upstream() {
     let _ = user_shutdown.send(());
     let _ = order_shutdown.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }
 
@@ -426,6 +427,7 @@ fn test_middleware_injects_headers() {
     // 清理
     let _ = mock_shutdown.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }
 
@@ -465,6 +467,7 @@ fn test_rate_limit_returns_429() {
     // 清理
     let _ = mock_shutdown.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }
 
@@ -494,6 +497,7 @@ fn test_no_route_returns_502() {
     // 清理
     let _ = mock_shutdown.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }
 
@@ -547,6 +551,7 @@ fn test_round_robin_distribution() {
     let _ = shutdown1.send(());
     let _ = shutdown2.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }
 
@@ -594,6 +599,7 @@ fn test_prefix_route_matching() {
     // 清理
     let _ = mock_shutdown.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }
 
@@ -659,6 +665,7 @@ fn test_exact_and_prefix_route_coexistence() {
     let _ = user_shutdown.send(());
     let _ = default_shutdown.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }
 
@@ -764,5 +771,6 @@ upstreams:
     let _ = user_shutdown.send(());
     let _ = order_shutdown.send(());
     gateway.kill().unwrap();
+    gateway.wait().ok();
     std::fs::remove_file(&config_path).ok();
 }

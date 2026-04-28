@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config::{AuthConfig, KirinConfig};
 use crate::control_plane::admin_api::dto::RateLimitDTO;
 use crate::data_plane::filter::FilterChain;

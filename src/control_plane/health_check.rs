@@ -1,9 +1,9 @@
+#![allow(dead_code)]
+
 use pingora_load_balancing::LoadBalancer;
 use pingora_load_balancing::health_check;
 use pingora_load_balancing::prelude::RoundRobin;
 use std::time::Duration;
-
-/// health-check module
 
 pub struct HealthCheckConfig {
     // 检查间隔 (秒)
