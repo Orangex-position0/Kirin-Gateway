@@ -1,9 +1,9 @@
-use std::sync::{Arc, RwLock};
+use crate::control_plane::gateway_state::GatewayState;
+use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterResult};
 use async_trait::async_trait;
 use log::info;
 use pingora_http::{RequestHeader, ResponseHeader};
-use crate::control_plane::gateway_state::GatewayState;
-use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterResult};
+use std::sync::{Arc, RwLock};
 
 /// 请求日志 Filter
 pub struct LoggingFilter;

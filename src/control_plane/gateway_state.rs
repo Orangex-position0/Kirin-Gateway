@@ -1,14 +1,14 @@
+use crate::config::{AuthConfig, KirinConfig};
+use crate::control_plane::admin_api::dto::RateLimitDTO;
+use crate::data_plane::filter::FilterChain;
+use crate::data_plane::filter::auth::AuthFilter;
+use crate::data_plane::rate_limit::RateLimiter;
+use crate::data_plane::router::router_white_list::{RouteEntry, RouteRegistry};
+use crate::data_plane::router::{MatchType, RouteMatch, RouteRule, Router};
+use crate::data_plane::upstream::UpstreamCluster;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::sync::{Arc, RwLock};
-use crate::config::{AuthConfig, KirinConfig};
-use crate::data_plane::rate_limit::RateLimiter;
-use crate::data_plane::upstream::UpstreamCluster;
-use crate::data_plane::router::{Router, RouteRule, MatchType, RouteMatch};
-use crate::control_plane::admin_api::dto::RateLimitDTO;
-use crate::data_plane::filter::auth::AuthFilter;
-use crate::data_plane::filter::FilterChain;
-use crate::data_plane::router::router_white_list::{RouteEntry, RouteRegistry};
 
 /// 网关运行时共享状态
 ///
@@ -45,26 +45,36 @@ pub enum StateError {
     /// 路由构建失败（如正则非法、route_id 重复）
     RouteBuildFailed { route_id: String, reason: String },
     /// 认证配置加载失败
-    AuthConfigFailed {
-        reason: String,
-    }
+    AuthConfigFailed { reason: String },
 }
 
 impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            StateError::UnknownUpstream { path, upstream, available } => {
-                write!(f, "路由 '{}' 引用了不存在的上游 '{}'，可用上游: {:?}", path, upstream, available)
-            }
+            StateError::UnknownUpstream {
+                path,
+                upstream,
+                available,
+            } => {
+                write!(
+                    f,
+                    "路由 '{}' 引用了不存在的上游 '{}'，可用上游: {:?}",
+                    path, upstream, available
+                )
+            },
             StateError::InvalidMatchType { route_id, value } => {
-                write!(f, "路由 '{}' 的 match_type '{}' 无效，可选: exact, prefix, regex", route_id, value)
-            }
+                write!(
+                    f,
+                    "路由 '{}' 的 match_type '{}' 无效，可选: exact, prefix, regex",
+                    route_id, value
+                )
+            },
             StateError::RouteBuildFailed { route_id, reason } => {
                 write!(f, "路由 '{}' 构建失败: {}", route_id, reason)
-            }
+            },
             StateError::AuthConfigFailed { reason } => {
                 write!(f, "认证配置加载失败: {}", reason)
-            }
+            },
         }
     }
 }
@@ -109,7 +119,7 @@ impl GatewayState {
                         route_id: route_cfg.route_id.clone(),
                         value: other.to_string(),
                     });
-                }
+                },
             };
 
             // 根据匹配类型确定路径：Exact/Regex 使用 path，Prefix 使用 path_prefix
@@ -124,7 +134,7 @@ impl GatewayState {
                             match_type
                         ),
                     });
-                }
+                },
             };
 
             let rule = RouteRule {
@@ -136,12 +146,12 @@ impl GatewayState {
                 upstream: route_cfg.upstream.clone(),
             };
 
-            router.add_route(rule).map_err(|e| {
-                StateError::RouteBuildFailed {
+            router
+                .add_route(rule)
+                .map_err(|e| StateError::RouteBuildFailed {
                     route_id: route_cfg.route_id.clone(),
                     reason: e.to_string(),
-                }
-            })?;
+                })?;
 
             registry.register(RouteEntry {
                 route_id: route_cfg.route_id.clone(),
@@ -163,20 +173,17 @@ impl GatewayState {
             .as_ref()
             .map(|rl| Arc::new(RateLimiter::new(rl.capacity, rl.refill_rate)));
 
-        
         // 3. 构建认证器
         let auth_config = match &config.auth {
             None => None,
-            Some(raw) => {
-                match raw.clone().into_auth_config() {
-                    Ok(ac) => Some(ac),
-                    Err(e) => {
-                        return Err(StateError::AuthConfigFailed {
-                            reason: e.to_string(),
-                        })
-                    }
-                }
-            }
+            Some(raw) => match raw.clone().into_auth_config() {
+                Ok(ac) => Some(ac),
+                Err(e) => {
+                    return Err(StateError::AuthConfigFailed {
+                        reason: e.to_string(),
+                    });
+                },
+            },
         };
 
         Ok(GatewayState {
@@ -191,16 +198,16 @@ impl GatewayState {
 
     /// 构建默认 Filter 链
     ///
-    /// 顺序：WhiteList -> Method -> Auth -> RateLimit -> Header -> Logging
+    /// 顺序：Method -> Auth -> RateLimit -> Header -> Logging
+    /// 注意：WhiteList 已移至 upstream_peer 中（路由匹配成功后执行），
+    /// 因为 request_filter 在 upstream_peer 之前执行，此时还没有路由匹配结果。
     fn build_default_filter_chain() -> FilterChain {
-        use crate::data_plane::filter::whitelist::WhiteListFilter;
-        use crate::data_plane::filter::method::MethodFilter;
-        use crate::data_plane::filter::rate_limit_filter::RateLimitFilter;
         use crate::data_plane::filter::header::HeaderFilter;
         use crate::data_plane::filter::logging::LoggingFilter;
+        use crate::data_plane::filter::method::MethodFilter;
+        use crate::data_plane::filter::rate_limit_filter::RateLimitFilter;
 
         let mut chain = FilterChain::new();
-        chain.add_filter(Arc::new(WhiteListFilter));
         chain.add_filter(Arc::new(MethodFilter));
         chain.add_filter(Arc::new(AuthFilter));
         chain.add_filter(Arc::new(RateLimitFilter));
@@ -230,19 +237,18 @@ impl GatewayState {
     pub fn rate_limiter(&self) -> Option<&Arc<RateLimiter>> {
         self.rate_limiter.as_ref()
     }
-    
+
     /// 更新限流策略参数（保留现有令牌桶状态）
     pub fn update_rate_limit_policy(&self, capacity: usize, refill_rate: usize) {
         if let Some(ref limiter) = self.rate_limiter {
             limiter.update_policy(capacity, refill_rate);
         }
     }
-    
+
     /// 获取限流配置摘要（用于 Admin API）
     pub fn rate_limit_summary(&self) -> Option<RateLimitDTO> {
         self.rate_limiter.as_ref().map(|limiter| limiter.summary())
     }
-
 }
 
 /// 共享状态 handle
@@ -251,7 +257,7 @@ pub type SharedState = Arc<RwLock<GatewayState>>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{KirinConfig, ServerConfig, RouteConfig, UpstreamConfig, NodeConfig};
+    use crate::config::{KirinConfig, NodeConfig, RouteConfig, ServerConfig, UpstreamConfig};
 
     /// 构建测试用最小合法配置
     fn make_config() -> KirinConfig {
@@ -333,11 +339,15 @@ mod tests {
 
         let result = GatewayState::from_config(&config);
         match result {
-            Err(StateError::UnknownUpstream { path, upstream, available }) => {
+            Err(StateError::UnknownUpstream {
+                path,
+                upstream,
+                available,
+            }) => {
                 assert_eq!(path, "/api/orders");
                 assert_eq!(upstream, "nonexistent-service");
                 assert!(available.contains(&"user-service".to_string()));
-            }
+            },
             Ok(_) => panic!("期望返回 StateError::UnknownUpstream，但构建成功"),
             Err(other) => panic!("期望 StateError::UnknownUpstream，但得到: {:?}", other),
         }
@@ -350,8 +360,14 @@ mod tests {
         let state = GatewayState::from_config(&config).unwrap();
 
         // 路由表正确
-        assert_eq!(state.match_route("/api/users").unwrap().upstream, "user-service");
-        assert_eq!(state.match_route("/api/orders").unwrap().upstream, "default-service");
+        assert_eq!(
+            state.match_route("/api/users").unwrap().upstream,
+            "user-service"
+        );
+        assert_eq!(
+            state.match_route("/api/orders").unwrap().upstream,
+            "default-service"
+        );
         assert!(state.match_route("/health").is_none());
 
         // 集群注册表正确
@@ -365,9 +381,12 @@ mod tests {
         // 接口注册表正确
         assert_eq!(state.registry.list_routes().len(), 2);
         assert!(state.registry.find_route("test-user-route").is_some());
-        assert_eq!(state.registry.resolve_path("/api/users"), Some("test-user-route".to_string()));
+        assert_eq!(
+            state.registry.resolve_path("/api/users"),
+            Some("test-user-route".to_string())
+        );
 
-        // FilterChain 已自动构建（6 个内置 Filter）
-        assert_eq!(state.filter_chain().len(), 6);
+        // FilterChain 已自动构建（5 个内置 Filter，WhiteList 已移至 upstream_peer）
+        assert_eq!(state.filter_chain().len(), 5);
     }
 }

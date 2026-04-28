@@ -1,6 +1,6 @@
-use std::fs;
 use jsonwebtoken::DecodingKey;
-use serde::{Deserialize};
+use serde::Deserialize;
+use std::fs;
 
 /// Configuration for the gateway
 
@@ -121,7 +121,15 @@ pub struct RateLimitConfig {
 /// 读取指定路径的配置文件并反序列化为 KirinConfig
 pub fn load_config(path: &str) -> Result<KirinConfig, Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
-    let config: KirinConfig = serde_yaml::from_str(&content)?;
+    parse_config(&content)
+}
+
+/// pure function: 从 YAML 字符串解析配置
+///
+/// - input: YAML 内容字符串
+/// - output: 解析后的配置结构
+pub fn parse_config(content: &str) -> Result<KirinConfig, Box<dyn std::error::Error>> {
+    let config: KirinConfig = serde_yaml::from_str(content)?;
     Ok(config)
 }
 
@@ -272,6 +280,34 @@ upstreams:
         let yaml = "this is not: valid: yaml: {{{{";
         let file = write_temp_yaml(yaml);
         let result = load_config(file.path().to_str().unwrap());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_config_valid_yaml() {
+        let yaml = r#"
+    server:
+      listen: "0.0.0.0:8080"
+    routes:
+      - route_id: "test"
+        path: "/api/test"
+        upstream: svc
+        applicant: "test"
+        applied_at: "2026-04-20T00:00:00+08:00"
+        description: "test"
+    upstreams:
+      svc:
+        nodes:
+          - addr: "127.0.0.1:9001"
+    "#;
+        let config = parse_config(yaml).unwrap();
+        assert_eq!(config.server.listen, "0.0.0.0:8080");
+        assert_eq!(config.routes.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_config_invalid_yaml() {
+        let result = parse_config("this is not: valid: yaml: {{{{");
         assert!(result.is_err());
     }
 }

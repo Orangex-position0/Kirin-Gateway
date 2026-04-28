@@ -1,10 +1,14 @@
-use std::sync::{Arc, RwLock};
-use async_trait::async_trait;
-use pingora_http::{RequestHeader, ResponseHeader};
 use crate::control_plane::gateway_state::GatewayState;
 use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterResult};
+use async_trait::async_trait;
+use pingora_http::{RequestHeader, ResponseHeader};
+use std::sync::{Arc, RwLock};
 
 /// 网关头注入 Filter
+///
+/// 请求阶段的 X-Gateway 头注入已移至 proxy.rs 的 upstream_request_filter，
+/// 因为 Pingora 的 request_filter 中修改的请求头不会传递给上游。
+/// 此 Filter 仅负责响应阶段注入 X-Powered-By 头。
 pub struct HeaderFilter;
 
 #[async_trait]
@@ -16,12 +20,10 @@ impl Filter for HeaderFilter {
     async fn request_filter(
         &self,
         _ctx: &mut FilterContext,
-        request_header: &mut RequestHeader,
+        _request_header: &mut RequestHeader,
         _state: &Arc<RwLock<GatewayState>>,
     ) -> FilterResult {
-        request_header
-            .insert_header("X-Gateway", "Kirin Gateway")
-            .unwrap();
+        // 请求阶段无操作，X-Gateway 头在 upstream_request_filter 中注入
         FilterResult::Continue
     }
 

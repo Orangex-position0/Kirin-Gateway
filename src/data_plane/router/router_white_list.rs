@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use regex::Regex;
 use crate::data_plane::router::MatchType;
+use regex::Regex;
+use std::collections::HashMap;
 
 /// white list of router
 /// used to check whether the router is allowed to be accessed
@@ -58,7 +58,7 @@ impl RouteRegistry {
         // exact match
         for entry in self.registered_routes.values() {
             if entry.match_type == MatchType::Exact && entry.path == path {
-                return Some(entry.route_id.clone())
+                return Some(entry.route_id.clone());
             }
         }
 

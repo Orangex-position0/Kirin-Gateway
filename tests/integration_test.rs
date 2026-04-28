@@ -137,10 +137,12 @@ pub async fn start_mock_upstream_with_id(
 /// 动态生成测试用的 YAML 配置文件
 ///
 /// 所有路由默认使用精确匹配（path），返回生成的配置文件路径
+///
+/// - `routes`: (RouteMeta, path, upstream) 三元组列表
 pub fn create_test_config(
     gateway_port: u16,
     upstreams: &[(&str, Vec<String>)],
-    routes: &[(&str, &str)],
+    routes: &[(RouteMeta, &str, &str)],
     rate_limit: Option<(usize, usize)>,
 ) -> String {
     let mut yaml = String::new();
@@ -150,8 +152,15 @@ pub fn create_test_config(
     ));
 
     yaml.push_str("routes:\n");
-    for (path, upstream) in routes {
-        yaml.push_str(&format!("  - path: \"{}\"\n    upstream: {}\n", path, upstream));
+    for (meta, path, upstream) in routes {
+        yaml.push_str(&format!(
+            "  - route_id: \"{}\"\n    path: \"{}\"\n    upstream: {}\n",
+            meta.route_id, path, upstream
+        ));
+        yaml.push_str(&format!(
+            "    applicant: \"{}\"\n    applied_at: \"{}\"\n    description: \"{}\"\n",
+            meta.applicant, meta.applied_at, meta.description
+        ));
     }
 
     yaml.push_str("\nupstreams:\n");
@@ -176,12 +185,42 @@ pub fn create_test_config(
     file_path
 }
 
+/// 测试路由的元数据（必填审计字段）
+///
+/// 封装 RouteConfig 中 route_id / applicant / applied_at / description 四个必填字段
+pub struct RouteMeta {
+    pub route_id: &'static str,
+    pub applicant: &'static str,
+    pub applied_at: &'static str,
+    pub description: &'static str,
+}
+
+impl RouteMeta {
+    /// 测试用默认元数据
+    pub fn test_default() -> Self {
+        RouteMeta {
+            route_id: "test-route",
+            applicant: "integration-test",
+            applied_at: "2026-04-27T00:00:00+08:00",
+            description: "integration test route",
+        }
+    }
+}
+
 /// 路由配置项：精确路径或前缀路径
 pub enum RouteEntry {
     /// 精确路径匹配
-    Exact(&'static str, &'static str),
+    Exact {
+        meta: RouteMeta,
+        path: &'static str,
+        upstream: &'static str,
+    },
     /// 前缀路径匹配
-    Prefix(&'static str, &'static str),
+    Prefix {
+        meta: RouteMeta,
+        prefix: &'static str,
+        upstream: &'static str,
+    },
 }
 
 /// 动态生成支持前缀路由的 YAML 配置文件
@@ -200,15 +239,34 @@ pub fn create_test_config_with_routes(
     yaml.push_str("routes:\n");
     for entry in routes {
         match entry {
-            RouteEntry::Exact(path, upstream) => {
-                yaml.push_str(&format!("  - path: \"{}\"\n    upstream: {}\n", path, upstream));
-            }
-            RouteEntry::Prefix(prefix, upstream) => {
+            RouteEntry::Exact {
+                meta,
+                path,
+                upstream,
+            } => {
                 yaml.push_str(&format!(
-                    "  - path_prefix: \"{}\"\n    upstream: {}\n",
-                    prefix, upstream
+                    "  - route_id: \"{}\"\n    path: \"{}\"\n    upstream: {}\n",
+                    meta.route_id, path, upstream
                 ));
-            }
+                yaml.push_str(&format!(
+                    "    applicant: \"{}\"\n    applied_at: \"{}\"\n    description: \"{}\"\n",
+                    meta.applicant, meta.applied_at, meta.description
+                ));
+            },
+            RouteEntry::Prefix {
+                meta,
+                prefix,
+                upstream,
+            } => {
+                yaml.push_str(&format!(
+                    "  - route_id: \"{}\"\n    path_prefix: \"{}\"\n    match_type: prefix\n    upstream: {}\n",
+                    meta.route_id, prefix, upstream
+                ));
+                yaml.push_str(&format!(
+                    "    applicant: \"{}\"\n    applied_at: \"{}\"\n    description: \"{}\"\n",
+                    meta.applicant, meta.applied_at, meta.description
+                ));
+            },
         }
     }
 
@@ -288,8 +346,22 @@ fn test_route_to_correct_upstream() {
             ),
         ],
         &[
-            ("/api/users", "user-service"),
-            ("/api/orders", "order-service"),
+            (
+                RouteMeta {
+                    route_id: "test-user-route",
+                    ..RouteMeta::test_default()
+                },
+                "/api/users",
+                "user-service",
+            ),
+            (
+                RouteMeta {
+                    route_id: "test-order-route",
+                    ..RouteMeta::test_default()
+                },
+                "/api/orders",
+                "order-service",
+            ),
         ],
         None,
     );
@@ -330,11 +402,8 @@ fn test_middleware_injects_headers() {
 
     let config_path = create_test_config(
         16289,
-        &[(
-            "svc",
-            vec![format!("127.0.0.1:{}", mock_addr.port())],
-        )],
-        &[("/api/users", "svc")],
+        &[("svc", vec![format!("127.0.0.1:{}", mock_addr.port())])],
+        &[(RouteMeta::test_default(), "/api/users", "svc")],
         None,
     );
 
@@ -348,10 +417,7 @@ fn test_middleware_injects_headers() {
 
     // 检查响应头：中间件应注入 X-Powered-By
     assert!(resp.headers().contains_key("X-Powered-By"));
-    assert_eq!(
-        resp.headers().get("X-Powered-By").unwrap(),
-        "Kirin Gateway"
-    );
+    assert_eq!(resp.headers().get("X-Powered-By").unwrap(), "Kirin Gateway");
 
     // 检查响应体：Mock 上游应收到 X-Gateway 请求头
     let body: serde_json::Value = resp.json().unwrap();
@@ -372,11 +438,8 @@ fn test_rate_limit_returns_429() {
     // 配置限流：capacity=3, refill_rate=1
     let config_path = create_test_config(
         16290,
-        &[(
-            "svc",
-            vec![format!("127.0.0.1:{}", mock_addr.port())],
-        )],
-        &[("/api/test", "svc")],
+        &[("svc", vec![format!("127.0.0.1:{}", mock_addr.port())])],
+        &[(RouteMeta::test_default(), "/api/test", "svc")],
         Some((3, 1)),
     );
 
@@ -413,11 +476,8 @@ fn test_no_route_returns_502() {
 
     let config_path = create_test_config(
         16291,
-        &[(
-            "svc",
-            vec![format!("127.0.0.1:{}", mock_addr.port())],
-        )],
-        &[("/api/users", "svc")],
+        &[("svc", vec![format!("127.0.0.1:{}", mock_addr.port())])],
+        &[(RouteMeta::test_default(), "/api/users", "svc")],
         None,
     );
 
@@ -454,7 +514,7 @@ fn test_round_robin_distribution() {
                 format!("127.0.0.1:{}", addr2.port()),
             ],
         )],
-        &[("/api/orders", "order-service")],
+        &[(RouteMeta::test_default(), "/api/orders", "order-service")],
         None,
     );
 
@@ -498,13 +558,12 @@ fn test_prefix_route_matching() {
 
     let config_path = create_test_config_with_routes(
         16293,
-        &[(
-            "svc",
-            vec![format!("127.0.0.1:{}", mock_addr.port())],
-        )],
-        &[
-            RouteEntry::Prefix("/api/", "svc"),
-        ],
+        &[("svc", vec![format!("127.0.0.1:{}", mock_addr.port())])],
+        &[RouteEntry::Prefix {
+            meta: RouteMeta::test_default(),
+            prefix: "/api/",
+            upstream: "svc",
+        }],
         None,
     );
 
@@ -529,10 +588,7 @@ fn test_prefix_route_matching() {
     assert_eq!(body["path"], "/api/orders");
 
     // 不匹配前缀的路径应返回 500
-    let resp = client
-        .get("http://127.0.0.1:16293/health")
-        .send()
-        .unwrap();
+    let resp = client.get("http://127.0.0.1:16293/health").send().unwrap();
     assert_eq!(resp.status(), 500);
 
     // 清理
@@ -551,18 +607,29 @@ fn test_exact_and_prefix_route_coexistence() {
     let config_path = create_test_config_with_routes(
         16294,
         &[
-            (
-                "user-svc",
-                vec![format!("127.0.0.1:{}", user_addr.port())],
-            ),
+            ("user-svc", vec![format!("127.0.0.1:{}", user_addr.port())]),
             (
                 "default-svc",
                 vec![format!("127.0.0.1:{}", default_addr.port())],
             ),
         ],
         &[
-            RouteEntry::Exact("/api/users", "user-svc"),
-            RouteEntry::Prefix("/api/", "default-svc"),
+            RouteEntry::Exact {
+                meta: RouteMeta {
+                    route_id: "test-user-route",
+                    ..RouteMeta::test_default()
+                },
+                path: "/api/users",
+                upstream: "user-svc",
+            },
+            RouteEntry::Prefix {
+                meta: RouteMeta {
+                    route_id: "test-default-route",
+                    ..RouteMeta::test_default()
+                },
+                prefix: "/api/",
+                upstream: "default-svc",
+            },
         ],
         None,
     );
@@ -606,18 +673,20 @@ fn test_config_hot_reload() {
     let config_path = create_test_config(
         16295,
         &[
-            (
-                "user-svc",
-                vec![format!("127.0.0.1:{}", user_addr.port())],
-            ),
+            ("user-svc", vec![format!("127.0.0.1:{}", user_addr.port())]),
             (
                 "order-svc",
                 vec![format!("127.0.0.1:{}", order_addr.port())],
             ),
         ],
-        &[
-            ("/api/users", "user-svc"),
-        ],
+        &[(
+            RouteMeta {
+                route_id: "test-user-route",
+                ..RouteMeta::test_default()
+            },
+            "/api/users",
+            "user-svc",
+        )],
         None,
     );
 
@@ -644,10 +713,18 @@ fn test_config_hot_reload() {
   threads: 1
 
 routes:
-  - path: "/api/users"
+  - route_id: "test-user-route"
+    path: "/api/users"
     upstream: user-svc
-  - path: "/api/orders"
+    applicant: "integration-test"
+    applied_at: "2026-04-27T00:00:00+08:00"
+    description: "integration test route"
+  - route_id: "test-order-route"
+    path: "/api/orders"
     upstream: order-svc
+    applicant: "integration-test"
+    applied_at: "2026-04-27T00:00:00+08:00"
+    description: "integration test route"
 
 upstreams:
   user-svc:
@@ -665,7 +742,7 @@ upstreams:
     std::fs::write(&config_path, updated_yaml).unwrap();
 
     // 等待文件监听器检测到变化并完成热重载
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    std::thread::sleep(std::time::Duration::from_secs(5));
 
     // 热重载后：/api/orders 应该可达
     let resp = client

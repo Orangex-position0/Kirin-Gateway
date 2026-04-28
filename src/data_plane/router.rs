@@ -1,8 +1,8 @@
+use crate::control_plane::admin_api::dto::RouteDTO;
+use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use regex::Regex;
-use crate::control_plane::admin_api::dto::RouteDTO;
 
 pub mod router_white_list;
 
@@ -36,13 +36,9 @@ pub enum RouterErrorBuilder {
         source: regex::Error,
     },
     /// route_id 重复
-    DuplicateRouteId {
-        route_id: String,
-    },
+    DuplicateRouteId { route_id: String },
     /// 匹配类型无效
-    InvalidMatchType {
-        value: String,
-    },
+    InvalidMatchType { value: String },
 }
 
 impl Display for RouterErrorBuilder {
@@ -50,13 +46,13 @@ impl Display for RouterErrorBuilder {
         match self {
             RouterErrorBuilder::InvalidRegex { pattern, source } => {
                 write!(f, "正则表达式 '{}' 编译失败: {}", pattern, source)
-            }
+            },
             RouterErrorBuilder::DuplicateRouteId { route_id } => {
                 write!(f, "route_id '{}' 已存在", route_id)
-            }
+            },
             RouterErrorBuilder::InvalidMatchType { value } => {
                 write!(f, "无效的匹配类型 '{}', 可选: exact, prefix, regex", value)
-            }
+            },
         }
     }
 }
@@ -116,8 +112,14 @@ impl Router {
         // route_id 唯一性校验
         let route_id = &rule.route_id;
         let exists = self.exact_routes.values().any(|r| &r.route_id == route_id)
-            || self.regex_routes.iter().any(|(_, r)| &r.route_id == route_id)
-            || self.prefix_routes.iter().any(|(_, r)| &r.route_id == route_id);
+            || self
+                .regex_routes
+                .iter()
+                .any(|(_, r)| &r.route_id == route_id)
+            || self
+                .prefix_routes
+                .iter()
+                .any(|(_, r)| &r.route_id == route_id);
 
         if exists {
             return Err(RouterErrorBuilder::DuplicateRouteId {
@@ -128,23 +130,21 @@ impl Router {
         match rule.match_type {
             MatchType::Exact => {
                 self.exact_routes.insert(rule.path.clone(), rule);
-            }
+            },
             MatchType::Regex => {
-                let compiled = Regex::new(&rule.path).map_err(|e| {
-                    RouterErrorBuilder::InvalidRegex {
+                let compiled =
+                    Regex::new(&rule.path).map_err(|e| RouterErrorBuilder::InvalidRegex {
                         pattern: rule.path.clone(),
                         source: e,
-                    }
-                })?;
+                    })?;
                 self.regex_routes.push((compiled, rule));
-            }
+            },
             MatchType::Prefix => {
                 let prefix = rule.prefix.as_deref().unwrap_or(&rule.path);
                 let prefix_entry = (prefix.to_string(), rule);
                 self.prefix_routes.push(prefix_entry);
-                self.prefix_routes
-                    .sort_by(|a, b| b.0.len().cmp(&a.0.len()));
-            }
+                self.prefix_routes.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+            },
         }
 
         Ok(())
@@ -224,14 +224,16 @@ mod tests {
     #[test]
     fn test_exact_match() {
         let mut router = Router::new();
-        router.add_route(RouteRule {
-            route_id: "user-profile".to_string(),
-            match_type: MatchType::Exact,
-            path: "/api/users/profile".to_string(),
-            prefix: None,
-            methods: vec!["GET".to_string()],
-            upstream: "user-service".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "user-profile".to_string(),
+                match_type: MatchType::Exact,
+                path: "/api/users/profile".to_string(),
+                prefix: None,
+                methods: vec!["GET".to_string()],
+                upstream: "user-service".to_string(),
+            })
+            .unwrap();
 
         let result = router.match_route("/api/users/profile").unwrap();
         assert_eq!(result.upstream, "user-service");
@@ -246,14 +248,16 @@ mod tests {
     #[test]
     fn test_regex_match() {
         let mut router = Router::new();
-        router.add_route(RouteRule {
-            route_id: "user-by-id".to_string(),
-            match_type: MatchType::Regex,
-            path: r"^/api/users/(\d+)$".to_string(),
-            prefix: None,
-            methods: vec!["GET".to_string()],
-            upstream: "user-service".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "user-by-id".to_string(),
+                match_type: MatchType::Regex,
+                path: r"^/api/users/(\d+)$".to_string(),
+                prefix: None,
+                methods: vec!["GET".to_string()],
+                upstream: "user-service".to_string(),
+            })
+            .unwrap();
 
         // 匹配数字 ID
         let result = router.match_route("/api/users/123").unwrap();
@@ -268,22 +272,26 @@ mod tests {
     #[test]
     fn test_regex_priority_order() {
         let mut router = Router::new();
-        router.add_route(RouteRule {
-            route_id: "v2-api".to_string(),
-            match_type: MatchType::Regex,
-            path: r"^/api/(v2)/.+$".to_string(),
-            prefix: None,
-            methods: vec![],
-            upstream: "v2-service".to_string(),
-        }).unwrap();
-        router.add_route(RouteRule {
-            route_id: "any-api".to_string(),
-            match_type: MatchType::Regex,
-            path: r"^/api/.+$".to_string(),
-            prefix: None,
-            methods: vec![],
-            upstream: "default-service".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "v2-api".to_string(),
+                match_type: MatchType::Regex,
+                path: r"^/api/(v2)/.+$".to_string(),
+                prefix: None,
+                methods: vec![],
+                upstream: "v2-service".to_string(),
+            })
+            .unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "any-api".to_string(),
+                match_type: MatchType::Regex,
+                path: r"^/api/.+$".to_string(),
+                prefix: None,
+                methods: vec![],
+                upstream: "default-service".to_string(),
+            })
+            .unwrap();
 
         // 两个正则都能匹配，先声明的 v2-api 优先
         let result = router.match_route("/api/v2/users").unwrap();
@@ -299,32 +307,38 @@ mod tests {
     fn test_match_priority() {
         let mut router = Router::new();
         // 精确匹配
-        router.add_route(RouteRule {
-            route_id: "exact-route".to_string(),
-            match_type: MatchType::Exact,
-            path: "/api/users".to_string(),
-            prefix: None,
-            methods: vec![],
-            upstream: "exact-svc".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "exact-route".to_string(),
+                match_type: MatchType::Exact,
+                path: "/api/users".to_string(),
+                prefix: None,
+                methods: vec![],
+                upstream: "exact-svc".to_string(),
+            })
+            .unwrap();
         // 正则匹配（也能匹配 /api/users）
-        router.add_route(RouteRule {
-            route_id: "regex-route".to_string(),
-            match_type: MatchType::Regex,
-            path: r"^/api/\w+$".to_string(),
-            prefix: None,
-            methods: vec![],
-            upstream: "regex-svc".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "regex-route".to_string(),
+                match_type: MatchType::Regex,
+                path: r"^/api/\w+$".to_string(),
+                prefix: None,
+                methods: vec![],
+                upstream: "regex-svc".to_string(),
+            })
+            .unwrap();
         // 前缀匹配（也能匹配 /api/users）
-        router.add_route(RouteRule {
-            route_id: "prefix-route".to_string(),
-            match_type: MatchType::Prefix,
-            path: String::new(),
-            prefix: Some("/api/".to_string()),
-            methods: vec![],
-            upstream: "prefix-svc".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "prefix-route".to_string(),
+                match_type: MatchType::Prefix,
+                path: String::new(),
+                prefix: Some("/api/".to_string()),
+                methods: vec![],
+                upstream: "prefix-svc".to_string(),
+            })
+            .unwrap();
 
         let result = router.match_route("/api/users").unwrap();
         assert_eq!(result.route_id, "exact-route");
@@ -340,25 +354,35 @@ mod tests {
     #[test]
     fn test_prefix_longest_first() {
         let mut router = Router::new();
-        router.add_route(RouteRule {
-            route_id: "short-prefix".to_string(),
-            match_type: MatchType::Prefix,
-            path: String::new(),
-            prefix: Some("/api".to_string()),
-            methods: vec![],
-            upstream: "default".to_string(),
-        }).unwrap();
-        router.add_route(RouteRule {
-            route_id: "long-prefix".to_string(),
-            match_type: MatchType::Prefix,
-            path: String::new(),
-            prefix: Some("/api/v2".to_string()),
-            methods: vec![],
-            upstream: "v2".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "short-prefix".to_string(),
+                match_type: MatchType::Prefix,
+                path: String::new(),
+                prefix: Some("/api".to_string()),
+                methods: vec![],
+                upstream: "default".to_string(),
+            })
+            .unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "long-prefix".to_string(),
+                match_type: MatchType::Prefix,
+                path: String::new(),
+                prefix: Some("/api/v2".to_string()),
+                methods: vec![],
+                upstream: "v2".to_string(),
+            })
+            .unwrap();
 
-        assert_eq!(router.match_route("/api/v2/users").unwrap().route_id, "long-prefix");
-        assert_eq!(router.match_route("/api/v1/users").unwrap().route_id, "short-prefix");
+        assert_eq!(
+            router.match_route("/api/v2/users").unwrap().route_id,
+            "long-prefix"
+        );
+        assert_eq!(
+            router.match_route("/api/v1/users").unwrap().route_id,
+            "short-prefix"
+        );
         assert!(router.match_route("/health").is_none());
     }
 
@@ -373,14 +397,16 @@ mod tests {
     #[test]
     fn test_duplicate_route_id_error() {
         let mut router = Router::new();
-        router.add_route(RouteRule {
-            route_id: "dup".to_string(),
-            match_type: MatchType::Exact,
-            path: "/a".to_string(),
-            prefix: None,
-            methods: vec![],
-            upstream: "svc".to_string(),
-        }).unwrap();
+        router
+            .add_route(RouteRule {
+                route_id: "dup".to_string(),
+                match_type: MatchType::Exact,
+                path: "/a".to_string(),
+                prefix: None,
+                methods: vec![],
+                upstream: "svc".to_string(),
+            })
+            .unwrap();
 
         let result = router.add_route(RouteRule {
             route_id: "dup".to_string(),
@@ -391,7 +417,10 @@ mod tests {
             upstream: "svc".to_string(),
         });
 
-        assert!(matches!(result, Err(RouterErrorBuilder::DuplicateRouteId { .. })));
+        assert!(matches!(
+            result,
+            Err(RouterErrorBuilder::DuplicateRouteId { .. })
+        ));
     }
 
     /// 正则表达式非法报错
@@ -407,6 +436,9 @@ mod tests {
             upstream: "svc".to_string(),
         });
 
-        assert!(matches!(result, Err(RouterErrorBuilder::InvalidRegex { .. })));
+        assert!(matches!(
+            result,
+            Err(RouterErrorBuilder::InvalidRegex { .. })
+        ));
     }
 }

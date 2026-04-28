@@ -1,5 +1,5 @@
+use crate::data_plane::router::{MatchType, RouteRule};
 use serde::Serialize;
-use crate::data_plane::router::{RouteRule, MatchType};
 
 /// DTO used by admin api
 

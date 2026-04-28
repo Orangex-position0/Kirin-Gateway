@@ -1,13 +1,13 @@
-use std::sync::{Arc, RwLock};
+use crate::control_plane::admin_api::dto::{RateLimitDTO, RouteDTO, UpstreamDTO};
+use crate::control_plane::control_plane::ControlPlane;
+use crate::control_plane::gateway_state::GatewayState;
 use async_trait::async_trait;
 use log::warn;
 use pingora_core::prelude::HttpPeer;
 use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
 use serde::Serialize;
-use crate::control_plane::control_plane::ControlPlane;
-use crate::control_plane::gateway_state::GatewayState;
-use crate::control_plane::admin_api::dto::{RouteDTO, UpstreamDTO, RateLimitDTO};
+use std::sync::{Arc, LockResult, RwLock};
 
 pub mod dto;
 
@@ -56,7 +56,11 @@ impl ProxyHttp for AdminProxy {
 
     fn new_ctx(&self) -> Self::CTX {}
 
-    async fn upstream_peer(&self, _session: &mut Session, _ctx: &mut Self::CTX) -> pingora_core::Result<Box<HttpPeer>> {
+    async fn upstream_peer(
+        &self,
+        _session: &mut Session,
+        _ctx: &mut Self::CTX,
+    ) -> pingora_core::Result<Box<HttpPeer>> {
         // Admin API 在 request_filter 中直接返回响应，不需要代理到上游
         Err(pingora_core::Error::new_str("Admin API should not proxy"))
     }
@@ -66,10 +70,7 @@ impl ProxyHttp for AdminProxy {
         session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> pingora_core::Result<bool> {
-        let path = session
-            .req_header()
-            .uri
-            .path();
+        let path = session.req_header().uri.path();
         let method = session.req_header().method.as_str();
 
         let (status_code, body): (u16, String) = match (method, path) {
@@ -77,95 +78,118 @@ impl ProxyHttp for AdminProxy {
             ("GET", "/admin/upstreams") => self.handle_upstreams(),
             ("GET", "/admin/rate-limit") => self.handle_rate_limit(),
             ("POST", "/admin/reload") => self.handle_reload(),
-            _ => (404, serde_json::to_string(&AdminResponse::<()>::error("接口不存在")).unwrap()),
+            _ => (
+                404,
+                serde_json::to_string(&AdminResponse::<()>::error("接口不存在")).unwrap(),
+            ),
         };
 
         let header = ResponseHeader::build(status_code, None)?;
-        session.write_response_header(Box::new(header), false).await?;
+        session
+            .write_response_header(Box::new(header), false)
+            .await?;
 
         let body_bytes = body.into_bytes();
-        session.write_response_body(Some(body_bytes.into()), false).await?;
+        session
+            .write_response_body(Some(body_bytes.into()), false)
+            .await?;
 
         Ok(true)
     }
 }
 
 impl AdminProxy {
-    /// 获取所有路由规则
-    fn handle_routes(&self) -> (u16, String) {
-        let state = match self.state.read() {
-            Ok(s) => s,
+    /// imperative Shell: 获取读锁，并调用纯函数处理数据
+    fn with_state<F>(&self, handler: F) -> (u16, String)
+    where
+        F: FnOnce(&GatewayState) -> (u16, String),
+    {
+        match self.state.read() {
+            Ok(state) => handler(&state),
             Err(e) => {
                 warn!("Admin API 获取读锁失败: {}", e);
-                return (
-                    500,
-                    serde_json::to_string(&AdminResponse::<()>::error("内部错误")).unwrap(),
-                );
-            }
-        };
+                build_error_response(500, "内部错误")
+            },
+        }
+    }
 
-        let routes: Vec<RouteDTO> = state.router.routes_summary();
-        let resp = AdminResponse::ok(routes);
-        (200, serde_json::to_string(&resp).unwrap())
+    /// 获取所有路由规则
+    fn handle_routes(&self) -> (u16, String) {
+        self.with_state(|state| {
+            let routes = state.router.routes_summary();
+            build_ok_response(routes)
+        })
     }
 
     /// 获取所有上游集群信息
     fn handle_upstreams(&self) -> (u16, String) {
-        let state = match self.state.read() {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("Admin API 获取读锁失败: {}", e);
-                return (
-                    500,
-                    serde_json::to_string(&AdminResponse::<()>::error("内部错误")).unwrap(),
-                );
-            }
-        };
+        self.with_state(|state| {
+            let upstreams: Vec<UpstreamDTO> = state
+                .clusters
+                .values()
+                .map(|cluster| cluster.summary())
+                .collect();
 
-        let upstreams: Vec<UpstreamDTO> = state
-            .clusters
-            .values()
-            .map(|cluster| cluster.summary())
-            .collect();
-
-        let resp = AdminResponse::ok(upstreams);
-        (200, serde_json::to_string(&resp).unwrap())
+            build_ok_response(upstreams)
+        })
     }
 
     /// 获取当前限流配置
     fn handle_rate_limit(&self) -> (u16, String) {
-        let state = match self.state.read() {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("Admin API 获取读锁失败: {}", e);
-                return (
-                    500,
-                    serde_json::to_string(&AdminResponse::<()>::error("内部错误")).unwrap(),
-                );
-            }
-        };
-
-        let dto = state.rate_limit_summary().unwrap_or_else(|| RateLimitDTO {
-            enabled: false,
-            capacity: None,
-            refill_rate: None,
-        });
-
-        let resp = AdminResponse::ok(dto);
-        (200, serde_json::to_string(&resp).unwrap())
+        self.with_state(|state| {
+            let dto = state.rate_limit_summary().unwrap_or_else(|| RateLimitDTO {
+                enabled: false,
+                capacity: None,
+                refill_rate: None,
+            });
+            build_ok_response(dto)
+        })
     }
 
     /// 手动触发配置热重载
     fn handle_reload(&self) -> (u16, String) {
         match self.control_plane.reload_simple() {
-            Ok(()) => {
-                let resp = AdminResponse::ok("重载成功");
-                (200, serde_json::to_string(&resp).unwrap())
-            }
-            Err(e) => {
-                let resp = AdminResponse::<()>::error(&e);
-                (400, serde_json::to_string(&resp).unwrap())
-            }
+            Ok(()) => build_ok_response("重载成功"),
+            Err(e) => build_error_response(400, &e),
         }
+    }
+}
+
+/// pure function: 构建成功响应
+///
+/// - input: 可序列化的数据
+/// - output:  (HTTP 状态码, JSON 字符串)
+fn build_ok_response<T: Serialize>(data: T) -> (u16, String) {
+    let resp = AdminResponse::ok(data);
+    (200, serde_json::to_string(&resp).unwrap())
+}
+
+/// pure function: 构建错误响应
+///
+/// - input: HTTP 状态码、错误消息
+/// - output: (HTTP 状态码, JSON 字符串)
+fn build_error_response(status: u16, message: &str) -> (u16, String) {
+    let resp = AdminResponse::<()>::error(message);
+    (status, serde_json::to_string(&resp).unwrap())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_ok_response() {
+        let (status, body) = build_ok_response(vec!["route1", "route2"]);
+        assert_eq!(status, 200);
+        assert!(body.contains("\"status\":\"ok\""));
+        assert!(body.contains("route1"));
+    }
+
+    #[test]
+    fn test_build_error_response() {
+        let (status, body) = build_error_response(500, "内部错误");
+        assert_eq!(status, 500);
+        assert!(body.contains("\"status\":\"error\""));
+        assert!(body.contains("内部错误"));
     }
 }

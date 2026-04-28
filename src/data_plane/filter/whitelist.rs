@@ -1,9 +1,9 @@
-use std::sync::{Arc, RwLock};
+use crate::control_plane::gateway_state::GatewayState;
+use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
 use async_trait::async_trait;
 use log::warn;
 use pingora_http::{RequestHeader, ResponseHeader};
-use crate::control_plane::gateway_state::GatewayState;
-use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
+use std::sync::{Arc, RwLock};
 
 /// 白名单校验 Filter
 ///
@@ -33,16 +33,13 @@ impl Filter for WhiteListFilter {
 
         match route_id {
             None => {
-                warn!(
-                    "接口未注册，拒绝访问: {} {}",
-                    ctx.method, ctx.path
-                );
+                warn!("接口未注册，拒绝访问: {} {}", ctx.method, ctx.path);
                 FilterResult::Stop(FilterReject::Forbidden)
-            }
+            },
             Some(id) => {
                 ctx.route_id = Some(id);
                 FilterResult::Continue
-            }
+            },
         }
     }
 

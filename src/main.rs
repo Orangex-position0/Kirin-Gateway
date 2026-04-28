@@ -2,12 +2,12 @@ mod config;
 mod control_plane;
 mod data_plane;
 
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
-use log::info;
-use data_plane::proxy::KirinProxy;
 use crate::control_plane::control_plane::ControlPlane;
 use crate::control_plane::gateway_state::GatewayState;
+use data_plane::proxy::KirinProxy;
+use log::info;
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 fn main() {
     env_logger::init();
@@ -54,7 +54,8 @@ fn main() {
             state: shared_state.clone(),
             control_plane: control_plane.clone(),
         };
-        let mut admin_service = pingora_proxy::http_proxy_service(&server.configuration, admin_proxy);
+        let mut admin_service =
+            pingora_proxy::http_proxy_service(&server.configuration, admin_proxy);
         admin_service.add_tcp(&admin_cfg.listen);
         server.add_service(admin_service);
 

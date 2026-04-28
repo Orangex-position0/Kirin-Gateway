@@ -1,7 +1,7 @@
-use std::time::Duration;
 use pingora_load_balancing::LoadBalancer;
-use pingora_load_balancing::prelude::RoundRobin;
 use pingora_load_balancing::health_check;
+use pingora_load_balancing::prelude::RoundRobin;
+use std::time::Duration;
 
 /// health-check module
 
@@ -22,10 +22,7 @@ impl Default for HealthCheckConfig {
 }
 
 // TCP health-check for LoadBalancer
-pub fn setup_health_check(
-    lb: &mut LoadBalancer<RoundRobin>,
-    config: &HealthCheckConfig,
-) {
+pub fn setup_health_check(lb: &mut LoadBalancer<RoundRobin>, config: &HealthCheckConfig) {
     let mut hc = health_check::TcpHealthCheck::new();
     hc.peer_template.options.connection_timeout = Some(Duration::from_secs(config.timeout_secs));
     lb.set_health_check(hc);

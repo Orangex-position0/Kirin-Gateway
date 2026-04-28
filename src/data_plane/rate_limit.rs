@@ -1,9 +1,9 @@
+use crate::control_plane::admin_api::dto::RateLimitDTO;
+use log::warn;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use log::warn;
-use crate::control_plane::admin_api::dto::RateLimitDTO;
 
 /// 限流功能
 
@@ -34,12 +34,12 @@ impl RateLimiter {
     /// return: (是否允许通过, 剩余令牌数)
     pub fn check(&self, ip: &str) -> (bool, usize) {
         let mut buckets = self.buckets.lock().unwrap();
-        let bucket = buckets
-            .entry(ip.to_string())
-            .or_insert_with(|| TokenBucket::new(
+        let bucket = buckets.entry(ip.to_string()).or_insert_with(|| {
+            TokenBucket::new(
                 self.capacity.load(Ordering::Relaxed),
                 self.refill_rate.load(Ordering::Relaxed),
-            ));
+            )
+        });
 
         let allowed = bucket.try_acquire();
         let remaining = bucket.remaining();
@@ -68,10 +68,10 @@ impl RateLimiter {
 
 /// token bucket
 pub struct TokenBucket {
-    capacity: usize,          // 最大 token 数
-    current_tokens: usize,    // 当前 token 数
-    refill_rate: usize,       // token 每秒补充速率
-    last_refill: Instant,     // 上次补充时间
+    capacity: usize,       // 最大 token 数
+    current_tokens: usize, // 当前 token 数
+    refill_rate: usize,    // token 每秒补充速率
+    last_refill: Instant,  // 上次补充时间
 }
 
 impl TokenBucket {
@@ -84,17 +84,15 @@ impl TokenBucket {
         }
     }
 
-    /// try to acquire a token
+    /// try to acquire a token from token bucket
     pub fn try_acquire(&mut self) -> bool {
         self.refill();
-        if self.current_tokens > 0 {
-            self.current_tokens -= 1;
-            true
-        } else {
-            false
-        }
+        let (allowed, remaining) = try_acquire_decision(self.current_tokens);
+        self.current_tokens = remaining;
+        allowed
     }
 
+    /// acquire remaining tokens in token bucket
     pub fn remaining(&self) -> usize {
         self.current_tokens
     }
@@ -104,10 +102,40 @@ impl TokenBucket {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_refill).as_secs();
         if elapsed > 0 {
-            let tokens_to_add = (elapsed as usize) * self.refill_rate;
-            self.current_tokens = (self.current_tokens + tokens_to_add).min(self.capacity);
+            self.current_tokens = calculate_refill_tokens(
+                elapsed,
+                self.current_tokens,
+                self.refill_rate,
+                self.capacity,
+            );
             self.last_refill = now;
         }
+    }
+}
+
+/// pure function: 计算补充后的令牌数
+///
+/// - input：经过秒数、当前令牌数、补充速率、容量上限
+/// - output：补充后的令牌数（不超过容量）
+fn calculate_refill_tokens(
+    elapsed_secs: u64,
+    current_tokens: usize,
+    refill_rate: usize,
+    capacity: usize,
+) -> usize {
+    let tokens_to_add = (elapsed_secs as usize) * refill_rate;
+    (current_tokens + tokens_to_add).min(capacity)
+}
+
+/// pure function: 判断是否允许请求，并返回消耗后的令牌数
+///
+/// - input: 当前令牌数
+/// - output: (是否允许请求, 消耗后的令牌数)
+fn try_acquire_decision(current_tokens: usize) -> (bool, usize) {
+    if current_tokens > 0 {
+        (true, current_tokens - 1)
+    } else {
+        (false, current_tokens)
     }
 }
 
@@ -207,5 +235,35 @@ mod tests {
         // 第 6 次应该被拒绝
         let (allowed, _) = limiter.check("10.0.0.1");
         assert!(!allowed);
+    }
+
+    /// Pure Function Test
+    #[test]
+    fn test_calculate_refill_tokens_no_elapsed() {
+        // elapsed = 0，令牌数不变
+        assert_eq!(calculate_refill_tokens(0, 10, 5, 100), 10);
+    }
+
+    #[test]
+    fn test_calculate_refill_tokens_normal() {
+        // elapsed = 3, refill_rate = 5, current = 10 → 10 + 15 = 25
+        assert_eq!(calculate_refill_tokens(3, 10, 5, 100), 25);
+    }
+
+    #[test]
+    fn test_calculate_refill_tokens_capped_at_capacity() {
+        // elapsed = 1, refill_rate = 100, current = 95 → min(195, 100) = 100
+        assert_eq!(calculate_refill_tokens(1, 95, 100, 100), 100);
+    }
+
+    #[test]
+    fn test_try_acquire_decision_allowed() {
+        assert_eq!(try_acquire_decision(5), (true, 4));
+        assert_eq!(try_acquire_decision(1), (true, 0));
+    }
+
+    #[test]
+    fn test_try_acquire_decision_rejected() {
+        assert_eq!(try_acquire_decision(0), (false, 0));
     }
 }

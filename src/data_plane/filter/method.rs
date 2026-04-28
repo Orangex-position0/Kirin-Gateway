@@ -1,9 +1,9 @@
-use std::sync::{Arc, RwLock};
+use crate::control_plane::gateway_state::GatewayState;
+use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
 use async_trait::async_trait;
 use log::warn;
 use pingora_http::{RequestHeader, ResponseHeader};
-use crate::control_plane::gateway_state::GatewayState;
-use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
+use std::sync::{Arc, RwLock};
 
 /// HTTP 方法校验 Filter
 ///

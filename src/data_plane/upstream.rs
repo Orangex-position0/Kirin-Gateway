@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use crate::control_plane::admin_api::dto::UpstreamDTO;
 use pingora_core::prelude::HttpPeer;
 use pingora_load_balancing::{LoadBalancer, selection::RoundRobin};
-use crate::control_plane::admin_api::dto::UpstreamDTO;
+use std::sync::Arc;
 
 /// 上游集群：封装负载均衡器与节点地址列表
 pub struct UpstreamCluster {

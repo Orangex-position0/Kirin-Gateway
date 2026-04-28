@@ -1,13 +1,13 @@
-use std::sync::{Arc, RwLock};
+use crate::control_plane::gateway_state::GatewayState;
+use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
 use async_trait::async_trait;
-use std::collections::HashSet;
-use jsonwebtoken::{decode, Algorithm, Validation};
+use jsonwebtoken::{Algorithm, Validation, decode};
 use log::warn;
 use pingora_http::{RequestHeader, ResponseHeader};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::control_plane::gateway_state::GatewayState;
-use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
+use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 
 /// JWT Claims
 #[derive(Debug, Deserialize, Serialize)]
@@ -62,7 +62,12 @@ impl Filter for AuthFilter {
         FilterName::Auth
     }
 
-    async fn request_filter(&self, ctx: &mut FilterContext, request_header: &mut RequestHeader, state: &Arc<RwLock<GatewayState>>) -> FilterResult {
+    async fn request_filter(
+        &self,
+        ctx: &mut FilterContext,
+        request_header: &mut RequestHeader,
+        state: &Arc<RwLock<GatewayState>>,
+    ) -> FilterResult {
         let (auth_config, needs_auth) = {
             let state_guard = state.read().unwrap_or_else(|e| {
                 warn!("Gateway state lock poisoned, recovering");
@@ -100,7 +105,7 @@ impl Filter for AuthFilter {
                     ctx.path, reason
                 );
                 return FilterResult::Stop(FilterReject::Unauthorized);
-            }
+            },
         };
 
         let mut validation = Validation::new(Algorithm::RS256);
@@ -108,25 +113,17 @@ impl Filter for AuthFilter {
         validation.iss = Some(HashSet::from([auth_config.issuer.clone()]));
         validation.leeway = 30;
 
-        let token_data = match decode::<JwtClaims>(
-            &token,
-            &auth_config.decoding_key,
-            &validation,
-        ) {
+        let token_data = match decode::<JwtClaims>(&token, &auth_config.decoding_key, &validation) {
             Ok(data) => data,
             Err(e) => {
-                warn!(
-                    "[AuthFilter] JWT 验证失败，路径: {}，原因: {}",
-                    ctx.path, e
-                );
+                warn!("[AuthFilter] JWT 验证失败，路径: {}，原因: {}", ctx.path, e);
                 return FilterResult::Stop(FilterReject::Unauthorized);
-            }
+            },
         };
 
         ctx.auth_user_id = Some(token_data.claims.sub.clone());
 
-        let claims_json = serde_json::to_value(&token_data.claims)
-            .unwrap_or_default();
+        let claims_json = serde_json::to_value(&token_data.claims).unwrap_or_default();
 
         for claim_name in &auth_config.claims_to_forward {
             if let Some(value) = claims_json.get(claim_name) {
@@ -140,7 +137,11 @@ impl Filter for AuthFilter {
         FilterResult::Continue
     }
 
-    async fn response_filter(&self, _ctx: &mut FilterContext, _response_header: &mut ResponseHeader) {
+    async fn response_filter(
+        &self,
+        _ctx: &mut FilterContext,
+        _response_header: &mut ResponseHeader,
+    ) {
         // 认证 Filter 在响应阶段无操作
     }
 }

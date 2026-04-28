@@ -1,9 +1,9 @@
-use std::sync::{Arc, RwLock};
+use crate::control_plane::gateway_state::GatewayState;
+use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
 use async_trait::async_trait;
 use log::warn;
 use pingora_http::{RequestHeader, ResponseHeader};
-use crate::control_plane::gateway_state::GatewayState;
-use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
+use std::sync::{Arc, RwLock};
 
 /// 限流 Filter
 ///
@@ -49,11 +49,7 @@ impl Filter for RateLimitFilter {
         }
     }
 
-    async fn response_filter(
-        &self,
-        ctx: &mut FilterContext,
-        response_header: &mut ResponseHeader,
-    ) {
+    async fn response_filter(&self, ctx: &mut FilterContext, response_header: &mut ResponseHeader) {
         // 注入限流剩余令牌响应头
         if let Some(remaining) = ctx.rate_limit_remaining {
             response_header

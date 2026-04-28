@@ -3,17 +3,32 @@
 server:
   listen: "0.0.0.0:6188"
   threads: 2
-  
+
 admin:
   listen: "0.0.0.0:6189"
 
 routes:
-  - path: /api/users
+  - route_id: "user-api"
+    path: /api/users
+    match_type: exact
     upstream: user-service
-  - path_prefix: /api/orders
+    applicant: "admin"
+    applied_at: "2026-04-27T00:00:00+08:00"
+    description: "用户服务接口"
+  - route_id: "order-api"
+    path_prefix: /api/orders
+    match_type: prefix
     upstream: order-service
-  - path_prefix: /api
+    applicant: "admin"
+    applied_at: "2026-04-27T00:00:00+08:00"
+    description: "订单服务接口"
+  - route_id: "default-api"
+    path_prefix: /api
+    match_type: prefix
     upstream: default-service
+    applicant: "admin"
+    applied_at: "2026-04-27T00:00:00+08:00"
+    description: "默认前缀路由"
 
 upstreams:
   user-service:
