@@ -4,6 +4,7 @@ mod data_plane;
 
 use crate::control_plane::control_plane::ControlPlane;
 use crate::control_plane::gateway_state::GatewayState;
+use crate::control_plane::health_check;
 use data_plane::proxy::KirinProxy;
 use log::info;
 use std::sync::{Arc, RwLock};
@@ -60,6 +61,16 @@ fn main() {
         server.add_service(admin_service);
 
         info!("Admin API started {}", admin_cfg.listen);
+    }
+
+    // 注册健康检查后台服务
+    {
+        let state = shared_state.read().unwrap();
+        for cluster in state.clusters.values() {
+            if let Some(bg) = health_check::create_background_service(&cluster.name, &cluster.lb) {
+                server.add_boxed_service(bg);
+            }
+        }
     }
 
     server.run_forever();

@@ -77,12 +77,17 @@ routes:
 upstreams:
   # Single-node example
   user-service:
+    # Load balancing algorithm (optional, defaults to round_robin)
+    # - round_robin: weighted round-robin
+    # - consistent_hash: consistent hashing (routes requests to a fixed node by key)
+    algorithm: round_robin
     nodes:
       - addr: "127.0.0.1:8081"
         weight: 1
 
   # Multi-node example (equal weights, round-robin distribution)
   order-service:
+    algorithm: round_robin
     nodes:
       - addr: "127.0.0.1:8082"
         weight: 1
@@ -98,9 +103,23 @@ upstreams:
   #       weight: 2
 
   default-service:
+    algorithm: round_robin
     nodes:
       - addr: "127.0.0.1:8090"
         weight: 1
+
+  # Upstream with health check example
+  # health-service:
+  #   algorithm: round_robin
+  #   nodes:
+  #     - addr: "127.0.0.1:8091"
+  #       weight: 1
+  #   # Health check configuration (optional, disabled when not set)
+  #   health_check:
+  #     # Check interval in seconds
+  #     interval_secs: 5
+  #     # Connection timeout in seconds (defaults to 3)
+  #     timeout_secs: 3
 
 # ============================================================
 # Rate Limiting (optional — remove this section to disable)

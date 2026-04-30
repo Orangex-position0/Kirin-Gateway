@@ -84,6 +84,33 @@ impl ControlPlane {
         Ok(())
     }
 
+    pub fn reload_diff(&self) -> Result<(), String> {
+        info!("开始增量热重载配置: {}", self.config_path);
+
+        let new_config =
+            config::load_config(&self.config_path).map_err(|e| format!("加载配置失败: {}", e))?;
+
+        for route_cfg in &new_config.routes {
+            if !new_config.upstreams.contains_key(&route_cfg.upstream) {
+                return Err(format!(
+                    "路由 '{}' 引用了不存在的上游 '{}'",
+                    route_cfg.route_id, route_cfg.upstream
+                ));
+            }
+        }
+
+        let mut state = self
+            .state
+            .write()
+            .map_err(|e| format!("获取写锁失败: {}", e))?;
+        state
+            .diff_update(&new_config)
+            .map_err(|e| format!("配置文件增量更新失败: {}", e))?;
+
+        info!("配置增量热重载完成");
+        Ok(())
+    }
+
     /// 获取配置文件路径
     pub fn config_path(&self) -> &str {
         &self.config_path
@@ -131,7 +158,7 @@ impl ControlPlane {
 
                 // 执行热重载
                 let cp = ControlPlane::new(state.clone(), config_path.clone());
-                match cp.reload_simple() {
+                match cp.reload_diff() {
                     Ok(()) => info!("热重载成功"),
                     Err(e) => error!("热重载失败，保持旧配置: {}", e),
                 }

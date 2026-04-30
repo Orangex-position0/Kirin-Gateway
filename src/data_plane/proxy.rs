@@ -148,8 +148,13 @@ impl ProxyHttp for KirinProxy {
 
         info!("路由匹配成功: {} {} → {}", method, path, upstream_name);
 
+        let key = ctx
+            .filter_ctx
+            .as_ref()
+            .map(|f| f.client_ip.as_bytes())
+            .unwrap_or(b"");
         cluster
-            .select_peer()
+            .select_peer(key)
             .ok_or_else(|| Error::new_str("无可用上游节点"))
     }
 

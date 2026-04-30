@@ -77,12 +77,17 @@ routes:
 upstreams:
   # 单节点示例
   user-service:
+    # 负载均衡算法（可选，默认 round_robin）
+    # - round_robin: 加权轮询
+    # - consistent_hash: 一致性哈希（基于请求 key 定向到固定节点）
+    algorithm: round_robin
     nodes:
       - addr: "127.0.0.1:8081"
         weight: 1
 
   # 多节点示例（权重相同，轮询分配）
   order-service:
+    algorithm: round_robin
     nodes:
       - addr: "127.0.0.1:8082"
         weight: 1
@@ -98,9 +103,23 @@ upstreams:
   #       weight: 2
 
   default-service:
+    algorithm: round_robin
     nodes:
       - addr: "127.0.0.1:8090"
         weight: 1
+
+  # 带健康检查的上游服务示例
+  # health-service:
+  #   algorithm: round_robin
+  #   nodes:
+  #     - addr: "127.0.0.1:8091"
+  #       weight: 1
+  #   # 健康检查配置（可选，不配置则不启用健康检查）
+  #   health_check:
+  #     # 检查间隔（秒）
+  #     interval_secs: 5
+  #     # 连接超时阈值（秒，默认 3）
+  #     timeout_secs: 3
 
 # ============================================================
 # 限流配置（可选，整节可删除以禁用限流）

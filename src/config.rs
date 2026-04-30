@@ -7,7 +7,7 @@ use std::fs;
 /// 网关全局配置
 ///
 /// 对应 config.yaml 的顶层结构，包含服务监听、路由规则、上游服务及限流策略
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct KirinConfig {
     /// 服务监听配置
     pub server: ServerConfig,
@@ -36,7 +36,7 @@ pub struct AdminConfig {
 /// 服务监听配置
 ///
 /// 定义网关自身的监听地址和工作线程数
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ServerConfig {
     /// 监听地址，格式为 "ip:port"，如 "0.0.0.0:8080"
     pub listen: String,
@@ -52,7 +52,7 @@ fn default_match_type() -> String {
 /// 路由规则配置
 ///
 /// 支持精确路径匹配和路径前缀匹配两种模式，将请求转发到指定的上游服务
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RouteConfig {
     /// 接口唯一标识，用于接口注册和管理
     pub route_id: String,
@@ -82,16 +82,26 @@ pub struct RouteConfig {
 /// 上游服务配置
 ///
 /// 定义一组可用的后端服务节点，网关将在此组内进行负载均衡
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct UpstreamConfig {
     /// 后端节点列表
     pub nodes: Vec<NodeConfig>,
+    /// 负载均衡算法，默认为 round_robin
+    #[serde(default = "default_algorithm")]
+    pub algorithm: String,
+    /// 健康检查配置
+    #[serde(default)]
+    pub health_check: Option<HealthCheckConfig>,
+}
+
+fn default_algorithm() -> String {
+    "round_robin".to_string()
 }
 
 /// 后端节点配置
 ///
 /// 描述单个上游服务实例的地址和负载均衡权重
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct NodeConfig {
     /// 节点地址，格式为 "ip:port"
     pub addr: String,
@@ -169,6 +179,29 @@ impl AuthConfigRaw {
             issuer: self.issuer,
             claims_to_forward: self.claims_to_forward,
         })
+    }
+}
+
+/// Health check 配置
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct HealthCheckConfig {
+    // 检查间隔 (秒)
+    pub interval_secs: u64,
+    // 连接超时阈值 (秒)
+    #[serde(default = "default_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+fn default_timeout_secs() -> u64 {
+    3
+}
+
+impl Default for HealthCheckConfig {
+    fn default() -> Self {
+        HealthCheckConfig {
+            interval_secs: 5,
+            timeout_secs: default_timeout_secs(),
+        }
     }
 }
 

@@ -216,6 +216,32 @@ impl Router {
 
         summaries
     }
+
+    /// 按 route_id 移除路由规则
+    pub fn remove_route(&mut self, route_id: &str) -> bool {
+        // 在精确匹配表中查找
+        if let Some(key) = self
+            .exact_routes
+            .iter()
+            .find(|(_, r)| r.route_id == route_id)
+            .map(|(k, _)| k.clone())
+        {
+            self.exact_routes.remove(&key);
+            return true;
+        }
+
+        // 在正则匹配表中查找
+        let before = self.regex_routes.len();
+        self.regex_routes.retain(|(_, r)| r.route_id != route_id);
+        if self.regex_routes.len() < before {
+            return true;
+        }
+
+        // 在前缀匹配表中查找
+        let before = self.prefix_routes.len();
+        self.prefix_routes.retain(|(_, r)| r.route_id != route_id);
+        self.prefix_routes.len() < before
+    }
 }
 
 #[cfg(test)]

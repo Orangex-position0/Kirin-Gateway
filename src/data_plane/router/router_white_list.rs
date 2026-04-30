@@ -50,6 +50,11 @@ impl RouteRegistry {
         self.registered_routes.insert(entry.route_id.clone(), entry);
     }
 
+    /// 注销接口条目
+    pub fn unregister(&mut self, route_id: &str) -> bool {
+        self.registered_routes.remove(route_id).is_some()
+    }
+
     /// 将请求路径解析为已注册的路由 ID
     ///
     /// 匹配优先级: 精确匹配 > 正则匹配 > 前缀匹配
