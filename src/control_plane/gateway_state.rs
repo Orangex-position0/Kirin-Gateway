@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::config::{AuthConfig, KirinConfig, RouteConfig, UpstreamConfig};
+use crate::config::{AuthConfig, KirinConfig, RouteConfig, UpstreamConfig, validate_config};
 use crate::control_plane::admin_api::dto::RateLimitDTO;
 use crate::data_plane::filter::FilterChain;
 use crate::data_plane::filter::auth::AuthFilter;
@@ -53,6 +53,10 @@ pub enum StateError {
     AuthConfigFailed { reason: String },
     /// 上游集群构建失败
     UpstreamBuildFailed { name: String, reason: String },
+    /// 配置校验失败
+    ConfigValidationFailed {
+        errors: Vec<crate::config::ValidationError>,
+    },
 }
 
 impl std::fmt::Display for StateError {
@@ -85,6 +89,13 @@ impl std::fmt::Display for StateError {
             StateError::UpstreamBuildFailed { name, reason } => {
                 write!(f, "上游集群 '{}' 构建失败: {}", name, reason)
             },
+            StateError::ConfigValidationFailed { errors } => {
+                write!(f, "配置校验失败 ({} 个错误):", errors.len())?;
+                for err in errors {
+                    write!(f, "\n - {}", err)?;
+                }
+                Ok(())
+            },
         }
     }
 }
@@ -94,6 +105,9 @@ impl std::error::Error for StateError {}
 impl GatewayState {
     /// 从配置中构建共享状态 GatewayState
     pub fn from_config(config: &KirinConfig) -> Result<Self, StateError> {
+        // 全量配置校验
+        validate_config(config).map_err(|errors| StateError::ConfigValidationFailed { errors })?;
+
         let available_upstreams: Vec<String> = config.upstreams.keys().cloned().collect();
 
         // 校验上游引用: 每条路由引用的上游必须存在
@@ -268,6 +282,10 @@ impl GatewayState {
 
     /// 增量更新: 对比新旧配置，只重建变更部分
     pub fn diff_update(&mut self, new_config: &KirinConfig) -> Result<(), StateError> {
+        // 配置校验
+        validate_config(new_config)
+            .map_err(|errors| StateError::ConfigValidationFailed { errors })?;
+
         let old_config = self.config_snapshot.clone();
 
         // 1. Diff Route
@@ -619,17 +637,16 @@ mod tests {
 
         let result = GatewayState::from_config(&config);
         match result {
-            Err(StateError::UnknownUpstream {
-                path,
-                upstream,
-                available,
-            }) => {
-                assert_eq!(path, "/api/orders");
-                assert_eq!(upstream, "nonexistent-service");
-                assert!(available.contains(&"user-service".to_string()));
+            Err(StateError::ConfigValidationFailed { errors }) => {
+                assert!(errors.iter().any(|e| e.field == "route.upstream"));
+                assert!(
+                    errors
+                        .iter()
+                        .any(|e| e.message.contains("nonexistent-service"))
+                );
             },
-            Ok(_) => panic!("期望返回 StateError::UnknownUpstream，但构建成功"),
-            Err(other) => panic!("期望 StateError::UnknownUpstream，但得到: {:?}", other),
+            Ok(_) => panic!("期望校验失败，但构建成功"),
+            Err(other) => panic!("期望 ConfigValidationFailed，但得到: {:?}", other),
         }
     }
 
@@ -842,5 +859,38 @@ mod tests {
     fn test_router_remove_nonexistent() {
         let mut router = Router::new();
         assert!(!router.remove_route("not-exist"));
+    }
+
+    #[test]
+    fn test_from_config_validation_failed() {
+        let mut config = make_config();
+        config.server.listen = "invalid".to_string();
+        let result = GatewayState::from_config(&config);
+        match result {
+            Err(StateError::ConfigValidationFailed { errors }) => {
+                assert!(!errors.is_empty());
+                assert!(errors.iter().any(|e| e.field == "server.listen"));
+            },
+            Err(other) => panic!("期望 ValidationFailed，得到: {:?}", other),
+            Ok(_) => panic!("期望校验失败"),
+        }
+    }
+
+    #[test]
+    fn test_diff_update_validation_failed() {
+        let old_config = make_base_config();
+        let mut state = GatewayState::from_config(&old_config).unwrap();
+
+        let mut bad_config = old_config.clone();
+        bad_config.server.listen = "not-valid".to_string();
+
+        let result = state.diff_update(&bad_config);
+        match result {
+            Err(StateError::ConfigValidationFailed { errors }) => {
+                assert!(!errors.is_empty());
+            },
+            Err(other) => panic!("期望 ValidationFailed，得到: {:?}", other),
+            Ok(_) => panic!("期望校验失败"),
+        }
     }
 }
