@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# pre-push hook: 运行 clippy 和测试
+# 任一检查失败则阻止推送
+
+set -euo pipefail
+
+echo "[pre-push] 正在运行 Clippy 检查 (cargo clippy -- -D warnings)..."
+
+if ! cargo clippy -- -D warnings 2>&1; then
+    echo ""
+    echo "[pre-push] Clippy 检查失败！请修复上述警告后重试。"
+    exit 1
+fi
+
+echo "[pre-push] Clippy 检查通过。"
+echo ""
+echo "[pre-push] 正在运行测试 (cargo test)..."
+
+if ! cargo test 2>&1; then
+    echo ""
+    echo "[pre-push] 测试失败！请修复失败的测试用例后重试。"
+    exit 1
+fi
+
+echo "[pre-push] 所有检查通过，允许推送。"

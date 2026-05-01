@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# pre-commit hook: 检查 Rust 代码格式
+# 运行 cargo fmt --check，格式不通过则阻止提交
+
+set -euo pipefail
+
+echo "[pre-commit] 正在检查代码格式 (cargo fmt --check)..."
+
+if ! cargo fmt --check 2>&1; then
+    echo ""
+    echo "[pre-commit] 代码格式检查失败！请运行以下命令修复："
+    echo "  cargo fmt"
+    exit 1
+fi
+
+echo "[pre-commit] 格式检查通过。"
