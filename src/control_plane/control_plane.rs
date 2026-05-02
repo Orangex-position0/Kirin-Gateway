@@ -3,12 +3,12 @@
 use crate::config;
 use crate::config::parse_config;
 use crate::control_plane::gateway_state::GatewayState;
-use log::{error, info};
 use notify::{RecursiveMode, Watcher};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
 use std::time::Duration;
+use tracing::{error, info};
 
 /// 控制面模块
 /// 负载配置加载、校验、状态构建和配置热重载

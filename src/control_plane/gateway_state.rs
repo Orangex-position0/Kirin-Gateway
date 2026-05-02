@@ -8,10 +8,10 @@ use crate::data_plane::rate_limit::RateLimiter;
 use crate::data_plane::router::router_white_list::{RouteEntry, RouteRegistry};
 use crate::data_plane::router::{MatchType, RouteMatch, RouteRule, Router};
 use crate::data_plane::upstream::UpstreamCluster;
-use log::info;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 use std::sync::{Arc, RwLock};
+use tracing::info;
 
 /// 网关运行时共享状态
 ///

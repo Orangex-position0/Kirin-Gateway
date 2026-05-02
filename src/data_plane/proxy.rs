@@ -3,10 +3,14 @@ use std::sync::{Arc, RwLock};
 use crate::control_plane::gateway_state::GatewayState;
 use crate::data_plane::filter::{FilterContext, FilterResult};
 use async_trait::async_trait;
-use log::{info, warn};
+use hyper::http;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::{Error, Result};
 use pingora_proxy::{ProxyHttp, Session};
+use tracing::{info, warn};
+
+/// Prometheus exposition format 标准协议版本
+const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=utf-8";
 
 /// 网关代理服务（纯数据面）
 ///
@@ -35,64 +39,6 @@ impl ProxyHttp for KirinProxy {
     /// 创建本次请求的上下文实例
     fn new_ctx(&self) -> Self::CTX {
         RequestContext { filter_ctx: None }
-    }
-
-    /// 执行 FilterChain 请求阶段
-    ///
-    /// Pingora 调用顺序：request_filter → upstream_peer → upstream_request_filter
-    /// 在此阶段初始化 FilterContext 并执行限流、鉴权等 Filter。
-    /// 白名单校验在 upstream_peer 中执行（需要先路由匹配）。
-    async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
-        // 从 session 中提取请求信息，初始化 FilterContext
-        let path = session
-            .req_header()
-            .uri
-            .path_and_query()
-            .map(|p| p.path())
-            .unwrap_or("/")
-            .to_string();
-
-        let method = session.req_header().method.as_str().to_string();
-
-        let client_ip = session
-            .client_addr()
-            .and_then(|addr| addr.as_inet())
-            .map(|addr| addr.ip().to_string())
-            .unwrap_or_default();
-
-        ctx.filter_ctx = Some(FilterContext {
-            path,
-            method,
-            client_ip,
-            upstream_name: None,
-            route_id: None,
-            start_time: std::time::Instant::now(),
-            rate_limit_remaining: None,
-            auth_user_id: None,
-        });
-
-        let filter_ctx = ctx.filter_ctx.as_mut().unwrap();
-
-        // Clone FilterChain 后释放读锁，避免 RwLockReadGuard 跨 .await
-        let filter_chain = {
-            let state = self.state.read().unwrap_or_else(|e| {
-                warn!("Gateway state lock poisoned, recovering");
-                e.into_inner()
-            });
-            state.filter_chain().clone()
-        };
-
-        let result = filter_chain
-            .run_request_filters(filter_ctx, session.req_header_mut(), &self.state)
-            .await;
-
-        match result {
-            FilterResult::Continue => Ok(false),
-            FilterResult::Stop(reject) => {
-                let _ = session.respond_error(reject.status_code()).await;
-                Ok(true)
-            },
-        }
     }
 
     /// 路由匹配 + 白名单校验 + 选择上游节点
@@ -158,6 +104,73 @@ impl ProxyHttp for KirinProxy {
             .ok_or_else(|| Error::new_str("无可用上游节点"))
     }
 
+    /// 执行 FilterChain 请求阶段
+    ///
+    /// Pingora 调用顺序：request_filter → upstream_peer → upstream_request_filter
+    /// 在此阶段初始化 FilterContext 并执行限流、鉴权等 Filter。
+    /// 白名单校验在 upstream_peer 中执行（需要先路由匹配）。
+    async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
+        // 从 session 中提取请求信息，初始化 FilterContext
+        let path = session
+            .req_header()
+            .uri
+            .path_and_query()
+            .map(|p| p.path())
+            .unwrap_or("/")
+            .to_string();
+
+        if path == "/metrics" {
+            let body = crate::observability::metrics::collect();
+            let mut resp = pingora_http::ResponseHeader::build(200, None)?;
+            resp.insert_header("Content-Type", PROMETHEUS_CONTENT_TYPE)?;
+            session.write_response_header(Box::new(resp), false).await?;
+            session.write_response_body(Some(body.into()), true).await?;
+            return Ok(true);
+        }
+
+        let method = session.req_header().method.as_str().to_string();
+
+        let client_ip = session
+            .client_addr()
+            .and_then(|addr| addr.as_inet())
+            .map(|addr| addr.ip().to_string())
+            .unwrap_or_default();
+
+        ctx.filter_ctx = Some(FilterContext {
+            path,
+            method,
+            client_ip,
+            upstream_name: None,
+            route_id: None,
+            start_time: std::time::Instant::now(),
+            rate_limit_remaining: None,
+            auth_user_id: None,
+        });
+
+        let filter_ctx = ctx.filter_ctx.as_mut().unwrap();
+
+        // Clone FilterChain 后释放读锁，避免 RwLockReadGuard 跨 .await
+        let filter_chain = {
+            let state = self.state.read().unwrap_or_else(|e| {
+                warn!("Gateway state lock poisoned, recovering");
+                e.into_inner()
+            });
+            state.filter_chain().clone()
+        };
+
+        let result = filter_chain
+            .run_request_filters(filter_ctx, session.req_header_mut(), &self.state)
+            .await;
+
+        match result {
+            FilterResult::Continue => Ok(false),
+            FilterResult::Stop(reject) => {
+                let _ = session.respond_error(reject.status_code()).await;
+                Ok(true)
+            },
+        }
+    }
+
     /// 修改发往上游的请求头
     ///
     /// Pingora 文档明确说明：只有 upstream_request_filter 中修改的请求头
@@ -215,11 +228,30 @@ impl ProxyHttp for KirinProxy {
         Self::CTX: Send + Sync,
     {
         if let Some(ref fctx) = _ctx.filter_ctx {
-            let elapsed = fctx.start_time.elapsed();
+            let elapsed_ms = fctx.start_time.elapsed().as_millis() as u64;
+            let upstream = fctx.upstream_name.as_deref().unwrap_or("unknown");
+
+            crate::observability::metrics::REQUESTS_TOTAL
+                .with_label_values(&[&fctx.method, upstream, "200"])
+                .inc();
+
+            crate::observability::metrics::REQUEST_DURATION
+                .with_label_values(&[&fctx.method, upstream])
+                .observe(elapsed_ms as f64);
+
+            if _e.is_some() {
+                crate::observability::metrics::UPSTREAM_ERRORS_TOTAL
+                    .with_label_values(&[&fctx.method, upstream])
+                    .inc();
+            }
+
             info!(
-                "请求处理完成，上游: {}，耗时: {:?}",
-                fctx.upstream_name.as_deref().unwrap_or("unknown"),
-                elapsed
+                method = %fctx.method,
+                path = %fctx.path,
+                upstream = fctx.upstream_name.as_deref().unwrap_or("unknown"),
+                elapsed_ms = elapsed_ms,
+                client_ip = %fctx.client_ip,
+                "请求处理完成"
             );
         }
     }

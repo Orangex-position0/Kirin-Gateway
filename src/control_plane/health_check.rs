@@ -2,13 +2,13 @@
 
 use crate::config::HealthCheckConfig;
 use crate::data_plane::upstream::LoadBalancerKind;
-use log::info;
 use pingora_core::services::ServiceWithDependents;
 use pingora_core::services::background::GenBackgroundService;
 use pingora_load_balancing::LoadBalancer;
 use pingora_load_balancing::health_check::TcpHealthCheck;
 use pingora_load_balancing::selection::{BackendIter, BackendSelection};
 use std::time::Duration;
+use tracing::info;
 
 /// 为 LoadBalancer 配置 TCP 健康检查
 ///

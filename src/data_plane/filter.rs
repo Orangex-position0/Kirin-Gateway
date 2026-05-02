@@ -9,9 +9,9 @@ pub mod whitelist;
 
 use crate::control_plane::gateway_state::GatewayState;
 use async_trait::async_trait;
-use log::info;
 use pingora_http::{RequestHeader, ResponseHeader};
 use std::sync::{Arc, RwLock};
+use tracing::info;
 
 /// FilterChain 级别的拒绝原因
 #[derive(Debug, Clone)]
@@ -146,6 +146,13 @@ impl FilterChain {
             match result {
                 FilterResult::Continue => continue,
                 FilterResult::Stop(reject) => {
+                    crate::observability::metrics::FILTER_REJECTS_TOTAL
+                        .with_label_values(&[
+                            &filter.name().to_string(),
+                            &reject.status_code().to_string(),
+                        ])
+                        .inc();
+
                     info!(
                         "Filter Chain - Filter '{}' was interrupted (HTTP {})",
                         filter.name(),

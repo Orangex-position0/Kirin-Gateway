@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
 use crate::control_plane::admin_api::dto::RateLimitDTO;
-use log::warn;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+use tracing::warn;
 
 /// 限流功能
 pub struct RateLimiter {

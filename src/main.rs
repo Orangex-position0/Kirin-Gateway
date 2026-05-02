@@ -1,17 +1,22 @@
 mod config;
 mod control_plane;
 mod data_plane;
+mod observability;
 
 use crate::control_plane::control_plane::ControlPlane;
 use crate::control_plane::gateway_state::GatewayState;
 use crate::control_plane::health_check;
 use data_plane::proxy::KirinProxy;
-use log::info;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tracing::info;
 
 fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt()
+        .json() // 输出 JSON 格式
+        .with_target(false) // 不显示 module 路径
+        .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339())
+        .init();
 
     // 加载配置文件
     let config_path = std::env::args()

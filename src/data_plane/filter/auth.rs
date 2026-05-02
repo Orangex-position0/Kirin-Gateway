@@ -2,12 +2,12 @@ use crate::control_plane::gateway_state::GatewayState;
 use crate::data_plane::filter::{Filter, FilterContext, FilterName, FilterReject, FilterResult};
 use async_trait::async_trait;
 use jsonwebtoken::{Algorithm, Validation, decode};
-use log::warn;
 use pingora_http::{RequestHeader, ResponseHeader};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
+use tracing::warn;
 
 /// JWT Claims
 #[derive(Debug, Deserialize, Serialize)]

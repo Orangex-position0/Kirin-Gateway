@@ -2,12 +2,12 @@ use crate::control_plane::admin_api::dto::UpstreamDTO;
 use crate::control_plane::control_plane::ControlPlane;
 use crate::control_plane::gateway_state::GatewayState;
 use async_trait::async_trait;
-use log::warn;
 use pingora_core::prelude::HttpPeer;
 use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
 use serde::Serialize;
 use std::sync::{Arc, RwLock};
+use tracing::warn;
 
 pub mod dto;
 

@@ -1,0 +1,30 @@
+# Kirin Gateway 基准测试配置
+#
+# 用法：cargo run -- config.benchmark.yaml
+# 此配置面向压测场景，限流容量调大以避免压测时触发限流。
+
+server:
+  listen: "0.0.0.0:8080"
+  threads: 2
+
+admin:
+  listen: "0.0.0.0:8089"
+
+routes:
+  - route_id: "bench-api"
+    path: /api/users
+    match_type: exact
+    upstream: bench-service
+    applicant: "benchmark"
+    applied_at: "2026-05-02T00:00:00+08:00"
+    description: "基准压测路由"
+
+upstreams:
+  bench-service:
+    nodes:
+      - addr: "127.0.0.1:9000"
+        weight: 1
+
+rate_limit:
+  capacity: 100000
+  refill_rate: 50000
