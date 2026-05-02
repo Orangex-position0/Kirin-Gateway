@@ -284,6 +284,7 @@ mod tests {
             server: ServerConfig {
                 listen: "0.0.0.0:8080".to_string(),
                 threads: Some(2),
+                tls: None,
             },
             routes: vec![RouteConfig {
                 route_id: "test-route".to_string(),

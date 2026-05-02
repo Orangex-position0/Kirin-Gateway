@@ -14,3 +14,6 @@ openspec/
 
 # 代码面试报告
 code-interview-report-*.md
+
+# TLS certification
+certs/

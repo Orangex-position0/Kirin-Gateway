@@ -559,6 +559,7 @@ mod tests {
             server: ServerConfig {
                 listen: "0.0.0.0:8080".to_string(),
                 threads: Some(1),
+                tls: None,
             },
             routes: vec![
                 RouteConfig {
@@ -692,6 +693,7 @@ mod tests {
             server: ServerConfig {
                 listen: "0.0.0.0:8080".to_string(),
                 threads: Some(1),
+                tls: None,
             },
             routes: vec![RouteConfig {
                 route_id: "route-a".to_string(),

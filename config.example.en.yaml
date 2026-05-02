@@ -15,6 +15,14 @@ server:
   # - Recommended to tune manually in production based on load
   threads: 2
 
+  # TLS configuration (optional — remove to use plain HTTP)
+  # When enabled, the gateway listens in HTTPS mode and terminates TLS
+  # tls:
+  #   # TLS certificate file path (PEM format)
+  #   cert_path: "/path/to/server.crt"
+  #   # TLS private key file path (PEM format)
+  #   key_path: "/path/to/server.key"
+
 # ============================================================
 # Admin API Settings (optional — remove this section to disable)
 # ============================================================

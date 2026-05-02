@@ -52,6 +52,19 @@ fn main() {
     server.bootstrap();
 
     let mut lb_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
+
+    if let Some(ref tls) = config.server.tls {
+        let cert_path = &tls.cert_path;
+        let key_path = &tls.key_path;
+        lb_service
+            .add_tls(&config.server.listen, cert_path, key_path)
+            .expect("Failed to configure TLS");
+        tracing::info!("TLS 已启动, 证书: {}", cert_path);
+    } else {
+        // HTTP Mode
+        lb_service.add_tcp(&config.server.listen);
+    }
+
     lb_service.add_tcp(&config.server.listen);
     server.add_service(lb_service);
 

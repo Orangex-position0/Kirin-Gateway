@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use jsonwebtoken::DecodingKey;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 
 /// 网关全局配置
@@ -36,12 +36,22 @@ pub struct AdminConfig {
 /// 服务监听配置
 ///
 /// 定义网关自身的监听地址和工作线程数
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// 监听地址，格式为 "ip:port"，如 "0.0.0.0:8080"
     pub listen: String,
     /// 工作线程数，可选，未设置时由运行时自动决定
     pub threads: Option<usize>,
+    /// TLS 配置，可选，未配置则使用 TLS
+    pub tls: Option<TlsConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    /// 证书文件路径
+    pub cert_path: String,
+    /// 私钥文件路径
+    pub key_path: String,
 }
 
 /// 路由配置默认匹配类型
