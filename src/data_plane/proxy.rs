@@ -3,7 +3,6 @@ use std::sync::{Arc, RwLock};
 use crate::control_plane::gateway_state::GatewayState;
 use crate::data_plane::filter::{FilterContext, FilterResult};
 use async_trait::async_trait;
-use hyper::http;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::{Error, Result};
 use pingora_proxy::{ProxyHttp, Session};

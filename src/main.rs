@@ -13,10 +13,13 @@ use tracing::info;
 
 fn main() {
     tracing_subscriber::fmt()
-        .json() // 输出 JSON 格式
-        .with_target(false) // 不显示 module 路径
+        .json()
+        .with_target(false)
         .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339())
         .init();
+
+    // 初始化 Prometheus 指标注册
+    crate::observability::metrics::init();
 
     // 加载配置文件
     let config_path = std::env::args()
