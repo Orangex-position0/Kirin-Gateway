@@ -261,12 +261,27 @@ fn validate_auth(auth: &AuthConfigRaw, errors: &mut Vec<ValidationError>) {
     }
 }
 
-/// 解析 ip:port 格式的地址
+/// 校验地址格式，支持 ip:port 和 hostname:port
 fn parse_socket_addr(addr: &str) -> Result<(), String> {
     use std::net::SocketAddr;
-    addr.parse::<SocketAddr>()
+
+    // 先尝试纯 IP:port 格式
+    if addr.parse::<SocketAddr>().is_ok() {
+        return Ok(());
+    }
+
+    // 再尝试 hostname:port 格式
+    let colon = addr.rfind(':').ok_or_else(|| "缺少端口部分".to_string())?;
+    let (host, port_str) = addr.split_at(colon);
+    let port_str = &port_str[1..];
+
+    if host.is_empty() {
+        return Err("主机部分不能为空".to_string());
+    }
+    port_str
+        .parse::<u16>()
         .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("端口无效: {}", e))
 }
 
 #[cfg(test)]
@@ -416,6 +431,14 @@ mod tests {
         config.upstreams.get_mut("test-svc").unwrap().nodes[0].addr = "bad-addr".to_string();
         let errors = validate_config(&config).unwrap_err();
         assert!(errors.iter().any(|e| e.field.contains("addr")));
+    }
+
+    #[test]
+    fn test_validate_upstream_addr_hostname_port() {
+        let mut config = make_valid_config();
+        config.upstreams.get_mut("test-svc").unwrap().nodes[0].addr =
+            "host.docker.internal:8081".to_string();
+        assert!(validate_config(&config).is_ok());
     }
 
     #[test]

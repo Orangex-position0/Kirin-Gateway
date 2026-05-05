@@ -1,7 +1,7 @@
 # Kirin Gateway Configuration file
 
 server:
-  listen: "0.0.0.0:6188"
+  listen: "0.0.0.0:7188"
   threads: 2
   # TLS 配置（可选，取消注释并填入证书路径即可启用 HTTPS）
   # tls:
@@ -9,7 +9,7 @@ server:
   #   key_path: "certs/server.key"
 
 admin:
-  listen: "0.0.0.0:6189"
+  listen: "0.0.0.0:7189"
 
 routes:
   - route_id: "user-api"

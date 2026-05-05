@@ -72,11 +72,34 @@ impl UpstreamCluster {
     }
 }
 
+/// 将 addr 解析为 ip:port 字符串
+///
+/// 纯 IP:port 直接返回，hostname:port 则做 DNS 解析
+fn resolve_addr(addr: &str) -> Result<String, String> {
+    use std::net::SocketAddr;
+    use std::net::ToSocketAddrs;
+
+    // 纯 IP:port 无需解析
+    if addr.parse::<SocketAddr>().is_ok() {
+        return Ok(addr.to_string());
+    }
+
+    // hostname:port 通过 DNS 解析为 IP
+    let socket_addr = addr
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS 解析 '{}' 失败: {}", addr, e))?
+        .next()
+        .ok_or_else(|| format!("DNS 解析 '{}' 无结果", addr))?;
+
+    Ok(socket_addr.to_string())
+}
+
 /// 根据配置创建 Backend 集合
 fn build_backends(nodes: &[NodeConfig]) -> Result<BTreeSet<Backend>, String> {
     let mut backends = BTreeSet::new();
     for node in nodes {
-        let backend = Backend::new_with_weight(&node.addr, node.weight)
+        let resolved = resolve_addr(&node.addr)?;
+        let backend = Backend::new_with_weight(&resolved, node.weight)
             .map_err(|e| format!("节点地址 '{}' 无效: '{}'", node.addr, e))?;
         backends.insert(backend);
     }

@@ -65,7 +65,6 @@ fn main() {
         lb_service.add_tcp(&config.server.listen);
     }
 
-    lb_service.add_tcp(&config.server.listen);
     server.add_service(lb_service);
 
     info!("Kirin Gateway Data Plane started {}", config.server.listen);
