@@ -1,0 +1,15 @@
+target/
+.git/
+.github/
+.idea/
+.claude/
+docs/
+openspec/
+scripts/
+tests/
+benchmark/
+changelog/
+.gitattributes
+.gitignore
+*.md
+!README.md
