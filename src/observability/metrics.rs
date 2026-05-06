@@ -1,7 +1,14 @@
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Request, Response};
+use hyper_util::rt::TokioIo;
 use prometheus::{
     Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry, TextEncoder,
 };
 use std::sync::LazyLock;
+use tokio::net::TcpListener;
 
 pub static REGISTRY: LazyLock<Registry> = LazyLock::new(Registry::new);
 
@@ -66,4 +73,45 @@ pub fn collect() -> String {
     let mut buffer = Vec::new();
     encoder.encode(&metric_families, &mut buffer).unwrap();
     String::from_utf8(buffer).unwrap()
+}
+
+/// 处理单个 metrics HTTP 请求，返回 Prometheus text format 指标文本
+async fn metrics_handler(
+    _req: Request<hyper::body::Incoming>,
+) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    let body = collect();
+    Ok(Response::builder()
+        .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        .body(Full::new(Bytes::from(body)))
+        .unwrap())
+}
+
+/// 启动独立端口的 Prometheus metrics HTTP 服务
+///
+/// 监听指定地址，所有请求路径均返回 Prometheus text format 指标。
+pub async fn start_metrics_server(addr: String) {
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(l) => {
+            tracing::info!("Prometheus metrics endpoint started on {}", addr);
+            l
+        },
+        Err(e) => {
+            tracing::error!("Failed to bind metrics server on {}: {}", addr, e);
+            return;
+        },
+    };
+
+    // 循环接收连接，每个连接独立 tokio 任务处理
+    loop {
+        let (stream, _) = listener.accept().await.unwrap_or_else(|e| {
+            tracing::warn!("Metrics server accept error: {}", e);
+            panic!("accept failed: {}", e)
+        });
+        let io = TokioIo::new(stream);
+        tokio::spawn(async move {
+            let _ = http1::Builder::new()
+                .serve_connection(io, service_fn(metrics_handler))
+                .await;
+        });
+    }
 }

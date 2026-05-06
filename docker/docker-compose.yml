@@ -1,0 +1,64 @@
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+      - "9100:9100"
+    volumes:
+      - ../config.docker.yaml:/etc/kirin/config.yaml:ro
+    depends_on:
+      - mock-upstream
+    networks:
+      - kirin-net
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - kirin-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - kirin-net
+    restart: unless-stopped
+
+  mock-upstream:
+    image: nginx:alpine
+    volumes:
+      - ./mock-upstream/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - kirin-net
+    restart: unless-stopped
+
+  traffic-gen:
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "/scripts/traffic-gen.sh"]
+    volumes:
+      - ./traffic-gen.sh:/scripts/traffic-gen.sh:ro
+    depends_on:
+      - gateway
+    networks:
+      - kirin-net
+    restart: unless-stopped
+
+networks:
+  kirin-net:
+    driver: bridge

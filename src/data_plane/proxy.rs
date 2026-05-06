@@ -8,8 +8,8 @@ use pingora_core::{Error, Result};
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::{info, warn};
 
-/// Prometheus exposition format 标准协议版本
-const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=utf-8";
+// Prometheus exposition format 标准协议版本
+//const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=utf-8";
 
 /// 网关代理服务（纯数据面）
 ///
@@ -121,7 +121,7 @@ impl ProxyHttp for KirinProxy {
         if path == "/metrics" {
             let body = crate::observability::metrics::collect();
             let mut resp = pingora_http::ResponseHeader::build(200, None)?;
-            resp.insert_header("Content-Type", PROMETHEUS_CONTENT_TYPE)?;
+            // resp.insert_header("Content-Type", PROMETHEUS_CONTENT_TYPE)?;
             session.write_response_header(Box::new(resp), false).await?;
             session.write_response_body(Some(body.into()), true).await?;
             return Ok(true);

@@ -1,8 +1,6 @@
 # Kirin Gateway Docker 配置文件
-# 上游地址使用 host.docker.internal 访问宿主机服务
-
 server:
-  listen: "0.0.0.0:7188"
+  listen: "0.0.0.0:8080"
   threads: 2
 
 admin:
@@ -12,41 +10,31 @@ routes:
   - route_id: "user-api"
     path: /api/users
     match_type: exact
-    upstream: user-service
+    upstream: mock-service
     applicant: "admin"
-    applied_at: "2026-04-27T00:00:00+08:00"
+    applied_at: "2026-05-06T00:00:00+08:00"
     description: "用户服务接口"
   - route_id: "order-api"
     path_prefix: /api/orders
     match_type: prefix
-    upstream: order-service
+    upstream: mock-service
     applicant: "admin"
-    applied_at: "2026-04-27T00:00:00+08:00"
+    applied_at: "2026-05-06T00:00:00+08:00"
     description: "订单服务接口"
   - route_id: "default-api"
     path_prefix: /api
     match_type: prefix
-    upstream: default-service
+    upstream: mock-service
     applicant: "admin"
-    applied_at: "2026-04-27T00:00:00+08:00"
+    applied_at: "2026-05-06T00:00:00+08:00"
     description: "默认前缀路由"
 
 upstreams:
-  user-service:
+  mock-service:
     nodes:
-      - addr: "host.docker.internal:8081"
-        weight: 1
-  order-service:
-    nodes:
-      - addr: "host.docker.internal:8082"
-        weight: 1
-      - addr: "host.docker.internal:8083"
-        weight: 1
-  default-service:
-    nodes:
-      - addr: "host.docker.internal:8090"
+      - addr: "mock-upstream:80"
         weight: 1
 
 rate_limit:
-  capacity: 100
-  refill_rate: 10
+  capacity: 1000
+  refill_rate: 100

@@ -20,12 +20,15 @@ COPY . .
 RUN cargo build --release && strip target/release/kirin-gw
 
 # ============================================
-# 3. runtime
+# 3. runtime（含 shell, 可调试）
 # ============================================
-FROM gcr.io/distroless/cc-debian12
+FROM debian:bookworm-slim
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/kirin-gw /app/kirin-gw
 COPY config.yaml /etc/kirin/config.yaml
 USER nonroot:nonroot
-EXPOSE 6188 6189
+EXPOSE 6188 6189 8080 9100 7189
 ENTRYPOINT ["/app/kirin-gw", "/etc/kirin/config.yaml"]

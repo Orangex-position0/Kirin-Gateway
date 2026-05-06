@@ -67,6 +67,17 @@ fn main() {
 
     server.add_service(lb_service);
 
+    // 启动独立端口的 Prometheus metrics 服务
+    // Pingora 的 run_forever() 才创建 Tokio runtime，所以用独立线程 + 独立 runtime
+    let metrics_addr = "0.0.0.0:9100".to_string();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create metrics runtime");
+        rt.block_on(observability::metrics::start_metrics_server(metrics_addr));
+    });
+
     info!("Kirin Gateway Data Plane started {}", config.server.listen);
 
     // 注册 Admin API Service
