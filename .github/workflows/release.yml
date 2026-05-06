@@ -19,6 +19,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --tag ${{ github.ref_name }}
+        env:
+          OUTPUT: CHANGELOG.md
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -57,8 +68,17 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # GitHub Release 附带二进制
+      # GitHub Release 附带二进制和 git-cliff 生成的 changelog
       - uses: softprops/action-gh-release@v2
         with:
           files: target/release/kirin-gw
-          generate_release_notes: true
+          body: ${{ steps.git-cliff.outputs.changelog }}
+
+      # 将更新的 CHANGELOG.md 提交回仓库
+      - name: Commit updated CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "docs: update CHANGELOG.md for ${{ github.ref_name }}"
+          git push
