@@ -27,18 +27,29 @@ kirin-gw /path/to/config.yaml
 |-----------|--------|----|---------|---------------------|
 | `listen`  | string | 是  | —       | 监听地址，格式 `"ip:port"` |
 | `threads` | usize  | 否  | CPU 核心数 | 工作线程数               |
+| `tls`     | TlsConfig | 否 | — | TLS 终止配置，不配置则 HTTP 明文模式 |
+
+### TlsConfig
+
+| 字段          | 类型     | 必填 | 说明                |
+|-------------|--------|----|-------------------|
+| `cert_path` | string | 是  | TLS 证书文件路径（PEM 格式） |
+| `key_path`  | string | 是  | TLS 私钥文件路径（PEM 格式） |
 
 ```yaml
 server:
   listen: "0.0.0.0:6188"
   threads: 2
+  tls:
+    cert_path: "certs/server.crt"
+    key_path: "certs/server.key"
 ```
 
 ---
 
 ## routes — 路由规则
 
-路由按配置顺序从上到下匹配，**第一个匹配成功的规则生效**。
+路由匹配优先级：**精确匹配 > 正则匹配（按声明顺序）> 前缀匹配（最长前缀优先）**。
 
 | 字段            | 类型       | 必填 | 默认值          | 说明                                         |
 |---------------|----------|----|--------------|--------------------------------------------|
@@ -96,9 +107,11 @@ routes:
 
 ## upstreams — 上游服务
 
-| 字段      | 类型           | 必填 | 说明     |
-|---------|--------------|----|--------|
-| `nodes` | NodeConfig[] | 是  | 后端节点列表 |
+| 字段      | 类型           | 必填 | 默认值 | 说明     |
+|---------|--------------|----|------|--------|
+| `nodes` | NodeConfig[] | 是  | —    | 后端节点列表 |
+| `algorithm` | string   | 否  | `"round_robin"` | 负载均衡算法，可选 `round_robin` / `consistent_hash` |
+| `health_check` | HealthCheckConfig | 否 | — | 健康检查配置 |
 
 ### NodeConfig
 
@@ -110,12 +123,23 @@ routes:
 ```yaml
 upstreams:
   user-service:
+    algorithm: round_robin
     nodes:
       - addr: "127.0.0.1:8081"
         weight: 2
       - addr: "127.0.0.1:8082"
         weight: 1
+    health_check:
+      interval_secs: 5
+      timeout_secs: 3
 ```
+
+### HealthCheckConfig
+
+| 字段             | 类型   | 必填 | 默认值 | 说明       |
+|----------------|------|----|-----|----------|
+| `interval_secs` | u64  | 是  | —   | 检查间隔（秒） |
+| `timeout_secs`  | u64  | 否  | `3` | 连接超时（秒） |
 
 ---
 
