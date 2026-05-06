@@ -120,7 +120,7 @@ impl ProxyHttp for KirinProxy {
 
         if path == "/metrics" {
             let body = crate::observability::metrics::collect();
-            let mut resp = pingora_http::ResponseHeader::build(200, None)?;
+            let resp = pingora_http::ResponseHeader::build(200, None)?;
             // resp.insert_header("Content-Type", PROMETHEUS_CONTENT_TYPE)?;
             session.write_response_header(Box::new(resp), false).await?;
             session.write_response_body(Some(body.into()), true).await?;

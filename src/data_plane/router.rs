@@ -5,6 +5,8 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub mod router_white_list;
 
@@ -95,7 +97,9 @@ pub struct Router {
     /// 前缀匹配：按前缀长度降序排列的有序列表
     /// - key: 路径前缀
     /// - value: 路由规则
-    prefix_routes: Vec<(String, RouteRule)>,
+    prefix_routes: Mutex<Vec<(String, RouteRule)>>,
+    /// 前缀路由延迟排序标志，被标记的路由会在首次查询时才重排序
+    prefix_dirty: AtomicBool,
 }
 
 impl Router {
@@ -103,7 +107,8 @@ impl Router {
         Router {
             exact_routes: HashMap::new(),
             regex_routes: Vec::new(),
-            prefix_routes: Vec::new(),
+            prefix_routes: Mutex::new(Vec::new()),
+            prefix_dirty: AtomicBool::new(false),
         }
     }
 
@@ -120,6 +125,8 @@ impl Router {
                 .any(|(_, r)| &r.route_id == route_id)
             || self
                 .prefix_routes
+                .lock()
+                .unwrap()
                 .iter()
                 .any(|(_, r)| &r.route_id == route_id);
 
@@ -143,9 +150,11 @@ impl Router {
             },
             MatchType::Prefix => {
                 let prefix = rule.prefix.as_deref().unwrap_or(&rule.path);
-                let prefix_entry = (prefix.to_string(), rule);
-                self.prefix_routes.push(prefix_entry);
-                self.prefix_routes.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+                self.prefix_routes
+                    .lock()
+                    .unwrap()
+                    .push((prefix.to_string(), rule));
+                self.prefix_dirty.store(true, Ordering::Release);
             },
         }
 
@@ -186,9 +195,14 @@ impl Router {
             }
         }
 
-        // 优先级 3：前缀匹配（最长前缀优先）
-        for (prefix, rule) in &self.prefix_routes {
-            if path.starts_with(prefix.as_str()) {
+        // 优先级 3：前缀匹配（最长前缀优先，延迟排序）
+        let mut routes = self.prefix_routes.lock().unwrap();
+        if self.prefix_dirty.load(Ordering::Acquire) {
+            routes.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
+            self.prefix_dirty.store(false, Ordering::Release);
+        }
+        for (prefix, rule) in routes.iter() {
+            if path.starts_with(prefix) {
                 return Some(RouteMatch {
                     upstream: rule.upstream.clone(),
                     route_id: rule.route_id.clone(),
@@ -210,7 +224,7 @@ impl Router {
         for (_, rule) in &self.regex_routes {
             summaries.push(RouteDTO::from_rule(rule, MatchType::Regex));
         }
-        for (_, rule) in &self.prefix_routes {
+        for (_, rule) in self.prefix_routes.lock().unwrap().iter() {
             summaries.push(RouteDTO::from_rule(rule, MatchType::Prefix));
         }
 
@@ -238,9 +252,15 @@ impl Router {
         }
 
         // 在前缀匹配表中查找
-        let before = self.prefix_routes.len();
-        self.prefix_routes.retain(|(_, r)| r.route_id != route_id);
-        self.prefix_routes.len() < before
+        {
+            let mut routes = self.prefix_routes.lock().unwrap();
+            let before = routes.len();
+            routes.retain(|(_, r)| r.route_id != route_id);
+            if routes.len() < before {
+                return true;
+            }
+        }
+        false
     }
 }
 

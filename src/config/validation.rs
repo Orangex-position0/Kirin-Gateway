@@ -138,30 +138,27 @@ fn validate_routes(
 
         // path / path_prefix is required based on match_type
         match route.match_type.as_str() {
-            "exact" | "regex" => {
-                if route.path.as_ref().is_none_or(|p| p.trim().is_empty()) {
-                    errors.push(ValidationError {
-                        field: "route.path".to_string(),
-                        message: format!(
-                            "match_type 为 '{}' 时 path 必须存在且非空",
-                            route.match_type
-                        ),
-                        route_id: Some(route.route_id.clone()),
-                    });
-                }
+            "exact" | "regex" if route.path.as_ref().is_none_or(|p| p.trim().is_empty()) => {
+                errors.push(ValidationError {
+                    field: "route.path".to_string(),
+                    message: format!(
+                        "match_type 为 '{}' 时 path 必须存在且非空",
+                        route.match_type
+                    ),
+                    route_id: Some(route.route_id.clone()),
+                });
             },
-            "prefix" => {
+            "prefix"
                 if route
                     .path_prefix
                     .as_ref()
-                    .is_none_or(|p| p.trim().is_empty())
-                {
-                    errors.push(ValidationError {
-                        field: "route.path_prefix".to_string(),
-                        message: "match_type 为 'prefix' 时 path_prefix 必须存在且非空".to_string(),
-                        route_id: Some(route.route_id.clone()),
-                    });
-                }
+                    .is_none_or(|p| p.trim().is_empty()) =>
+            {
+                errors.push(ValidationError {
+                    field: "route.path_prefix".to_string(),
+                    message: "match_type 为 'prefix' 时 path_prefix 必须存在且非空".to_string(),
+                    route_id: Some(route.route_id.clone()),
+                });
             },
             _ => {},
         }
