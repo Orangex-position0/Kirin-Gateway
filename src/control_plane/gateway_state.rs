@@ -6,10 +6,14 @@ use crate::data_plane::filter::FilterChain;
 use crate::data_plane::filter::auth::AuthFilter;
 use crate::data_plane::rate_limit::RateLimiter;
 use crate::data_plane::router::router_white_list::{RouteEntry, RouteRegistry};
-use crate::data_plane::router::{MatchType, RouteMatch, RouteRule, Router};
+use crate::data_plane::router::{
+    CanaryContext, MatchType, RouteMatch, RouteRule, RouteRuleInfo, Router,
+};
 use crate::data_plane::upstream::UpstreamCluster;
+use ipnet::IpNet;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
+use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use tracing::info;
 
@@ -173,6 +177,19 @@ impl GatewayState {
                 prefix: route_cfg.path_prefix.clone(),
                 methods: route_cfg.methods.clone(),
                 upstream: route_cfg.upstream.clone(),
+                canary: route_cfg.canary.clone(),
+                ip_whitelist: parse_ip_list(&route_cfg.ip_whitelist).map_err(|e| {
+                    StateError::RouteBuildFailed {
+                        route_id: route_cfg.route_id.clone(),
+                        reason: e,
+                    }
+                })?,
+                ip_blacklist: parse_ip_list(&route_cfg.ip_blacklist).map_err(|e| {
+                    StateError::RouteBuildFailed {
+                        route_id: route_cfg.route_id.clone(),
+                        reason: e,
+                    }
+                })?,
             };
 
             router
@@ -248,9 +265,27 @@ impl GatewayState {
 
     // ---- 读取方法 ----
 
-    /// 路由匹配：根据请求路径查找对应的路由信息
-    pub fn match_route(&self, path: &str) -> Option<RouteMatch> {
-        self.router.match_route(path)
+    /// 路由匹配：根据请求路径和灰度上下文查找对应的路由信息
+    pub fn match_route(&self, path: &str, canary_ctx: &CanaryContext) -> Option<RouteMatch> {
+        self.router.match_route(path, canary_ctx)
+    }
+
+    /// 按 route_id 查找路由规则信息（用于 IP 过滤等场景）
+    pub fn find_route_info_by_id(&self, route_id: &str) -> Option<RouteRuleInfo> {
+        self.router.find_route_info_by_id(route_id)
+    }
+
+    /// 按 route_id 查找灰度配置
+    pub fn find_canary_config_by_route_id(
+        &self,
+        route_id: &str,
+    ) -> Option<crate::config::CanaryConfig> {
+        for route in &self.config_snapshot.routes {
+            if route.route_id == route_id {
+                return route.canary.clone();
+            }
+        }
+        None
     }
 
     /// 获取上游集群
@@ -496,6 +531,19 @@ impl GatewayState {
             prefix: route_cfg.path_prefix.clone(),
             methods: route_cfg.methods.clone(),
             upstream: route_cfg.upstream.clone(),
+            canary: route_cfg.canary.clone(),
+            ip_whitelist: parse_ip_list(&route_cfg.ip_whitelist).map_err(|e| {
+                StateError::RouteBuildFailed {
+                    route_id: route_cfg.route_id.clone(),
+                    reason: e,
+                }
+            })?,
+            ip_blacklist: parse_ip_list(&route_cfg.ip_blacklist).map_err(|e| {
+                StateError::RouteBuildFailed {
+                    route_id: route_cfg.route_id.clone(),
+                    reason: e,
+                }
+            })?,
         };
 
         self.router
@@ -530,6 +578,28 @@ fn routes_differ(a: &RouteConfig, b: &RouteConfig) -> bool {
         || a.methods != b.methods
         || a.upstream != b.upstream
         || a.is_auth != b.is_auth
+        || a.canary != b.canary
+        || a.ip_whitelist != b.ip_whitelist
+        || a.ip_blacklist != b.ip_blacklist
+}
+
+/// 将字符串列表解析为 IpNet 列表（支持 CIDR 和单独 IP）
+fn parse_ip_list(list: &Option<Vec<String>>) -> Result<Option<Vec<IpNet>>, String> {
+    match list {
+        None => Ok(None),
+        Some(entries) if entries.is_empty() => Ok(None),
+        Some(entries) => {
+            let mut result = Vec::with_capacity(entries.len());
+            for s in entries {
+                let net: IpNet = s.parse().or_else(|_| {
+                    let ip: IpAddr = s.parse().map_err(|_| format!("IP/CIDR '{}' 格式无效", s))?;
+                    Ok::<IpNet, String>(IpNet::from(ip))
+                })?;
+                result.push(net);
+            }
+            Ok(Some(result))
+        },
+    }
 }
 
 /// 判断两个上游配置是否不同
@@ -573,6 +643,9 @@ mod tests {
                     applied_at: "2026-04-20T00:00:00+08:00".to_string(),
                     description: "test route".to_string(),
                     is_auth: false,
+                    canary: None,
+                    ip_whitelist: None,
+                    ip_blacklist: None,
                 },
                 RouteConfig {
                     route_id: "test-default-route".to_string(),
@@ -585,6 +658,9 @@ mod tests {
                     applied_at: "2026-04-20T00:00:00+08:00".to_string(),
                     description: "test default route".to_string(),
                     is_auth: false,
+                    canary: None,
+                    ip_whitelist: None,
+                    ip_blacklist: None,
                 },
             ],
             upstreams: [
@@ -634,6 +710,9 @@ mod tests {
             applied_at: "2026-04-20T00:00:00+08:00".to_string(),
             description: "test bad upstream".to_string(),
             is_auth: false,
+            canary: None,
+            ip_whitelist: None,
+            ip_blacklist: None,
         });
 
         let result = GatewayState::from_config(&config);
@@ -657,16 +736,18 @@ mod tests {
         let config = make_config();
         let state = GatewayState::from_config(&config).unwrap();
 
+        let ctx = CanaryContext::empty();
+
         // 路由表正确
         assert_eq!(
-            state.match_route("/api/users").unwrap().upstream,
+            state.match_route("/api/users", &ctx).unwrap().upstream,
             "user-service"
         );
         assert_eq!(
-            state.match_route("/api/orders").unwrap().upstream,
+            state.match_route("/api/orders", &ctx).unwrap().upstream,
             "default-service"
         );
-        assert!(state.match_route("/health").is_none());
+        assert!(state.match_route("/health", &ctx).is_none());
 
         // 集群注册表正确
         assert!(state.get_cluster("user-service").is_some());
@@ -706,6 +787,9 @@ mod tests {
                 applied_at: "2026-04-20T00:00:00+08:00".to_string(),
                 description: "route a".to_string(),
                 is_auth: false,
+                canary: None,
+                ip_whitelist: None,
+                ip_blacklist: None,
             }],
             upstreams: [(
                 "svc-a".to_string(),
@@ -748,13 +832,26 @@ mod tests {
             applied_at: "2026-04-20T00:00:00+08:00".to_string(),
             description: "route b".to_string(),
             is_auth: false,
+            canary: None,
+            ip_whitelist: None,
+            ip_blacklist: None,
         });
 
         state.diff_update(&new_config).unwrap();
         assert_eq!(state.registry.list_routes().len(), 2);
-        assert!(state.router.match_route("/b").is_some());
+        assert!(
+            state
+                .router
+                .match_route("/b", &CanaryContext::empty())
+                .is_some()
+        );
         // 原有路由仍在
-        assert!(state.router.match_route("/a").is_some());
+        assert!(
+            state
+                .router
+                .match_route("/a", &CanaryContext::empty())
+                .is_some()
+        );
     }
 
     /// 增量删除路由
@@ -768,7 +865,12 @@ mod tests {
 
         state.diff_update(&new_config).unwrap();
         assert_eq!(state.registry.list_routes().len(), 0);
-        assert!(state.router.match_route("/a").is_none());
+        assert!(
+            state
+                .router
+                .match_route("/a", &CanaryContext::empty())
+                .is_none()
+        );
     }
 
     /// 未变更的上游集群保持原实例（健康检查状态保留）
@@ -828,12 +930,23 @@ mod tests {
                 prefix: None,
                 methods: vec![],
                 upstream: "svc".to_string(),
+                canary: None,
+                ip_whitelist: None,
+                ip_blacklist: None,
             })
             .unwrap();
 
-        assert!(router.match_route("/api/test").is_some());
+        assert!(
+            router
+                .match_route("/api/test", &CanaryContext::empty())
+                .is_some()
+        );
         assert!(router.remove_route("test"));
-        assert!(router.match_route("/api/test").is_none());
+        assert!(
+            router
+                .match_route("/api/test", &CanaryContext::empty())
+                .is_none()
+        );
     }
 
     /// Router.remove_route 正确移除前缀匹配路由
@@ -848,12 +961,23 @@ mod tests {
                 prefix: Some("/api/".to_string()),
                 methods: vec![],
                 upstream: "svc".to_string(),
+                canary: None,
+                ip_whitelist: None,
+                ip_blacklist: None,
             })
             .unwrap();
 
-        assert!(router.match_route("/api/anything").is_some());
+        assert!(
+            router
+                .match_route("/api/anything", &CanaryContext::empty())
+                .is_some()
+        );
         assert!(router.remove_route("test"));
-        assert!(router.match_route("/api/anything").is_none());
+        assert!(
+            router
+                .match_route("/api/anything", &CanaryContext::empty())
+                .is_none()
+        );
     }
 
     /// Router.remove_route 不存在的路由返回 false

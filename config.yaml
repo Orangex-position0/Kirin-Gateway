@@ -12,27 +12,34 @@ admin:
   listen: "0.0.0.0:7189"
 
 routes:
-  - route_id: "user-api"
-    path: /api/users
-    match_type: exact
-    upstream: user-service
-    applicant: "admin"
-    applied_at: "2026-04-27T00:00:00+08:00"
-    description: "用户服务接口"
-  - route_id: "order-api"
-    path_prefix: /api/orders
-    match_type: prefix
-    upstream: order-service
-    applicant: "admin"
-    applied_at: "2026-04-27T00:00:00+08:00"
-    description: "订单服务接口"
-  - route_id: "default-api"
-    path_prefix: /api
-    match_type: prefix
-    upstream: default-service
-    applicant: "admin"
-    applied_at: "2026-04-27T00:00:00+08:00"
-    description: "默认前缀路由"
+  # 正式路由
+  - route_id: "user-api-stable"
+    path: "/api/users"
+    match_type: "exact"
+    upstream: "user-service-v1"
+    applicant: "team-a"
+    applied_at: "2026-05-07T00:00:00+08:00"
+    description: "用户服务正式版本"
+    canary:
+      weight: 90
+
+  # 灰度路由
+  - route_id: "user-api-canary"
+    path: "/api/users"
+    match_type: "exact"
+    upstream: "user-service-v2"
+    applicant: "team-a"
+    applied_at: "2026-05-07T00:00:00+08:00"
+    description: "用户服务灰度版本"
+    canary:
+      weight: 10
+      match:
+        - type: "header"
+          key: "X-Canary"
+          value: "true"
+        - type: "cookie"
+          key: "env"
+          value: "canary"
 
 upstreams:
   user-service:

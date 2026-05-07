@@ -87,6 +87,83 @@ pub struct RouteConfig {
     /// 是否需要 JWT 认证，默认 false
     #[serde(default)]
     pub is_auth: bool,
+    /// 灰度发布配置, 可选
+    #[serde(default)]
+    pub canary: Option<CanaryConfig>,
+    /// IP 白名单（CIDR 或精确 IP），仅允许列表中的 IP 访问
+    #[serde(default)]
+    pub ip_whitelist: Option<Vec<String>>,
+    /// IP 黑名单（CIDR 或精确 IP），拒绝列表中的 IP 访问
+    #[serde(default)]
+    pub ip_blacklist: Option<Vec<String>>,
+}
+
+/// 灰度发布配置
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct CanaryConfig {
+    /// 流量权重百分比 (0-100)
+    pub weight: u8,
+    /// 条件匹配规则列表
+    #[serde(default)]
+    pub match_rules: Vec<CanaryMatchRule>,
+    /// 会话一致性策略
+    #[serde(default)]
+    pub stick: Option<StickyStrategy>,
+    /// Cookie Sticky Session 配置
+    pub sticky_cookie: Option<StickyCookieConfig>,
+}
+
+/// 灰度匹配规则类型
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum CanaryMatchType {
+    Header,
+    Cookie,
+    Query,
+}
+
+/// 单挑灰度匹配规则
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct CanaryMatchRule {
+    /// 匹配类型：header / cookie
+    #[serde(rename = "type")]
+    pub match_type: CanaryMatchType,
+    /// Header 或 Cookie 的 key
+    pub key: String,
+    /// 期望的值
+    pub value: String,
+}
+
+/// 会话一致性策略
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum StickyStrategy {
+    IpHash,
+    Cookie,
+}
+
+/// Cookie Sticky Session 配置
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct StickyCookieConfig {
+    /// Cookie 名称，默认 "kirin_canary"
+    #[serde(default = "default_cookie_name")]
+    pub name: String,
+    /// Cookie Path 属性，默认 "/"
+    #[serde(default = "default_cookie_path")]
+    pub path: String,
+    /// Cookie 过期时间（秒），默认 3600
+    #[serde(default = "default_max_age")]
+    pub max_age: u64,
+}
+
+fn default_cookie_name() -> String {
+    "kirin_canary".to_string()
+}
+fn default_cookie_path() -> String {
+    "/".to_string()
+}
+fn default_max_age() -> u64 {
+    3600
 }
 
 /// 上游服务配置

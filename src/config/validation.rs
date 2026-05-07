@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
-use std::fmt::Formatter;
-
 use super::types::{
     AuthConfigRaw, KirinConfig, RateLimitConfig, RouteConfig, ServerConfig, UpstreamConfig,
 };
+use std::collections::{HashMap, HashSet};
+use std::error::Error;
+use std::fmt::{Formatter, format};
+use tracing_subscriber::fmt::time::SystemTime;
 
 /// 配置验证 error
 #[derive(Debug, Clone)]
@@ -53,6 +53,8 @@ pub fn validate_config(config: &KirinConfig) -> Result<(), Vec<ValidationError>>
     if let Some(ref auth) = config.auth {
         validate_auth(auth, &mut errors);
     }
+    validate_canary(config, &mut errors);
+    validate_ip_lists(&config.routes, &mut errors);
 
     if errors.is_empty() {
         Ok(())
@@ -178,6 +180,62 @@ fn validate_routes(
     }
 }
 
+/// 灰度配置校验
+fn validate_canary(config: &KirinConfig, errors: &mut Vec<ValidationError>) {
+    for route in &config.routes {
+        if let Some(canary) = &route.canary {
+            // weight 范围校验
+            if canary.weight > 100 {
+                errors.push(ValidationError {
+                    field: format!("route.{}.canary.weight", route.route_id),
+                    message: format!("灰度权重必须在 0-100 范围内，当前值: {}", canary.weight),
+                    route_id: Some(route.route_id.clone()),
+                });
+            }
+
+            // match_rules key/value 非空校验
+            for (i, rule) in canary.match_rules.iter().enumerate() {
+                if rule.key.trim().is_empty() {
+                    errors.push(ValidationError {
+                        field: format!("route.{}.canary.match_rules[{}].key", route.route_id, i),
+                        message: "灰度匹配规则的 key 不能为空".to_string(),
+                        route_id: Some(route.route_id.clone()),
+                    });
+                }
+                if rule.value.trim().is_empty() {
+                    errors.push(ValidationError {
+                        field: format!("route.{}.canary.match_rules[{}].value", route.route_id, i),
+                        message: "灰度匹配规则的 value 不能为空".to_string(),
+                        route_id: Some(route.route_id.clone()),
+                    });
+                }
+            }
+        }
+    }
+
+    // 同一 path 下 weight 之和不超过 100
+    let mut path_weights: HashMap<String, u32> = HashMap::new();
+    for route in &config.routes {
+        let path_key = match (&route.match_type, &route.path, &route.path_prefix) {
+            (_, Some(p), _) => p.clone(),
+            (_, _, Some(p)) => p.clone(),
+            _ => continue,
+        };
+        if let Some(canary) = &route.canary {
+            *path_weights.entry(path_key).or_insert(0) += canary.weight as u32;
+        }
+    }
+    for (path, total) in path_weights {
+        if total > 100 {
+            errors.push(ValidationError {
+                field: format!("route.canary.weight_sum.{}", path),
+                message: format!("路径 '{}' 下灰度权重之和为 {}，超过 100", path, total),
+                route_id: None,
+            });
+        }
+    }
+}
+
 /// upstream 配置校验
 fn validate_upstreams(
     upstreams: &HashMap<String, UpstreamConfig>,
@@ -258,6 +316,33 @@ fn validate_auth(auth: &AuthConfigRaw, errors: &mut Vec<ValidationError>) {
     }
 }
 
+/// IP 黑白名单格式校验
+fn validate_ip_lists(routes: &[RouteConfig], errors: &mut Vec<ValidationError>) {
+    for route in routes {
+        for (field_name, list) in [
+            ("ip_whitelist", &route.ip_whitelist),
+            ("ip_blacklist", &route.ip_blacklist),
+        ] {
+            if let Some(entries) = list {
+                for (i, entry) in entries.iter().enumerate() {
+                    let is_valid = entry.parse::<ipnet::IpNet>().is_ok()
+                        || entry.parse::<std::net::IpAddr>().is_ok();
+                    if !is_valid {
+                        errors.push(ValidationError {
+                            field: format!("route.{}.{}[{}]", route.route_id, field_name, i),
+                            message: format!(
+                                "IP/CIDR '{}' 格式无效，应为 '1.2.3.4' 或 '1.2.3.0/24'",
+                                entry
+                            ),
+                            route_id: Some(route.route_id.clone()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// 校验地址格式，支持 ip:port 和 hostname:port
 fn parse_socket_addr(addr: &str) -> Result<(), String> {
     use std::net::SocketAddr;
@@ -309,6 +394,9 @@ mod tests {
                 applied_at: "2026-01-01T00:00:00+08:00".to_string(),
                 description: "test".to_string(),
                 is_auth: false,
+                canary: None,
+                ip_whitelist: None,
+                ip_blacklist: None,
             }],
             upstreams: [(
                 "test-svc".to_string(),
@@ -525,6 +613,9 @@ mod tests {
             applied_at: "2026-01-01T00:00:00+08:00".to_string(),
             description: "test".to_string(),
             is_auth: false,
+            canary: None,
+            ip_whitelist: None,
+            ip_blacklist: None,
         };
         let upstreams = HashMap::new();
         let errors = validate_route_config(&route, &upstreams).unwrap_err();

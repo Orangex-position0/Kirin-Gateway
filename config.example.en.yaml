@@ -77,6 +77,55 @@ routes:
   #   applied_at: "2026-04-22T00:00:00+08:00"
   #   description: "Admin panel endpoint"
 
+  # IP whitelist/blacklist example (optional)
+  # - route_id: "internal-route"
+  #   path: /api/internal/config
+  #   match_type: exact
+  #   upstream: config-service
+  #   ip_whitelist:
+  #     - "10.0.0.0/8"        # CIDR range
+  #     - "172.16.0.0/12"
+  #   ip_blacklist:
+  #     - "10.0.0.100"        # Exact IP
+  #   applicant: "admin"
+  #   applied_at: "2026-05-01T09:00:00+08:00"
+  #   description: "Internal config endpoint (IP restricted)"
+
+  # Canary release example (stable version, 80% traffic)
+  # - route_id: "user-stable"
+  #   path: /api/v2/users
+  #   match_type: exact
+  #   upstream: user-service-v1
+  #   canary:
+  #     weight: 80
+  #     match_rules: []
+
+  # Canary release example (canary version, condition match + 20% weight + Cookie Sticky)
+  # - route_id: "user-canary"
+  #   path: /api/v2/users
+  #   match_type: exact
+  #   upstream: user-service-v2
+  #   canary:
+  #     weight: 20
+  #     match_rules:
+  #       - type: header          # Header condition match
+  #         key: X-Canary
+  #         value: "true"
+  #       - type: cookie          # Cookie condition match
+  #         key: env
+  #         value: canary
+  #       - type: query           # Query parameter match
+  #         key: canary
+  #         value: "true"
+  #     stick: cookie              # Session affinity strategy: ip_hash or cookie
+  #     sticky_cookie:
+  #       name: kirin_canary       # Cookie name, defaults to "kirin_canary"
+  #       path: /                  # Cookie Path, defaults to "/"
+  #       max_age: 3600            # Expiry time in seconds, defaults to 3600
+  #   applicant: "developer"
+  #   applied_at: "2026-05-01T10:00:00+08:00"
+  #   description: "Canary test version"
+
 # ============================================================
 # Upstream Services
 # ============================================================
@@ -128,6 +177,18 @@ upstreams:
   #     interval_secs: 5
   #     # Connection timeout in seconds (defaults to 3)
   #     timeout_secs: 3
+
+  # Canary release companion upstreams example
+  # user-service-v1:
+  #   algorithm: round_robin
+  #   nodes:
+  #     - addr: "127.0.0.1:8081"
+  #       weight: 1
+  # user-service-v2:
+  #   algorithm: round_robin
+  #   nodes:
+  #     - addr: "127.0.0.1:8091"
+  #       weight: 1
 
 # ============================================================
 # Rate Limiting (optional — remove this section to disable)

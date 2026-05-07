@@ -52,6 +52,28 @@ pub static FILTER_REJECTS_TOTAL: LazyLock<IntCounterVec> = LazyLock::new(|| {
     .unwrap()
 });
 
+// 灰度请求总数
+pub static CANARY_REQUESTS_TOTAL: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    IntCounterVec::new(
+        Opts::new("kirin_canary_requests_total", "Canary route requests total"),
+        &["route_id", "method", "status_code"],
+    )
+    .unwrap()
+});
+
+// 灰度请求延迟
+pub static CANARY_REQUEST_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
+    HistogramVec::new(
+        HistogramOpts::new(
+            "kirin_canary_request_duration_seconds",
+            "Canary route request duration",
+        )
+        .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]),
+        &["route_id", "method"],
+    )
+    .unwrap()
+});
+
 /// 初始化: 将所有指标注册到全局 Registry
 pub fn init() {
     REGISTRY.register(Box::new(REQUESTS_TOTAL.clone())).unwrap();
@@ -63,6 +85,12 @@ pub fn init() {
         .unwrap();
     REGISTRY
         .register(Box::new(FILTER_REJECTS_TOTAL.clone()))
+        .unwrap();
+    REGISTRY
+        .register(Box::new(CANARY_REQUESTS_TOTAL.clone()))
+        .unwrap();
+    REGISTRY
+        .register(Box::new(CANARY_REQUEST_DURATION.clone()))
         .unwrap();
 }
 

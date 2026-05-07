@@ -77,6 +77,55 @@ routes:
   #   applied_at: "2026-04-22T00:00:00+08:00"
   #   description: "管理后台接口"
 
+  # IP 黑白名单示例（可选）
+  # - route_id: "internal-route"
+  #   path: /api/internal/config
+  #   match_type: exact
+  #   upstream: config-service
+  #   ip_whitelist:
+  #     - "10.0.0.0/8"        # CIDR 网段
+  #     - "172.16.0.0/12"
+  #   ip_blacklist:
+  #     - "10.0.0.100"        # 精确 IP
+  #   applicant: "admin"
+  #   applied_at: "2026-05-01T09:00:00+08:00"
+  #   description: "内部配置接口（IP 限制）"
+
+  # 灰度发布示例（stable 版本，80% 流量）
+  # - route_id: "user-stable"
+  #   path: /api/v2/users
+  #   match_type: exact
+  #   upstream: user-service-v1
+  #   canary:
+  #     weight: 80
+  #     match_rules: []
+
+  # 灰度发布示例（canary 版本，条件匹配 + 20% 权重 + Cookie Sticky）
+  # - route_id: "user-canary"
+  #   path: /api/v2/users
+  #   match_type: exact
+  #   upstream: user-service-v2
+  #   canary:
+  #     weight: 20
+  #     match_rules:
+  #       - type: header          # Header 条件匹配
+  #         key: X-Canary
+  #         value: "true"
+  #       - type: cookie          # Cookie 条件匹配
+  #         key: env
+  #         value: canary
+  #       - type: query           # Query 参数匹配
+  #         key: canary
+  #         value: "true"
+  #     stick: cookie              # 会话一致性策略：ip_hash 或 cookie
+  #     sticky_cookie:
+  #       name: kirin_canary       # Cookie 名称，默认 "kirin_canary"
+  #       path: /                  # Cookie Path，默认 "/"
+  #       max_age: 3600            # 过期时间（秒），默认 3600
+  #   applicant: "developer"
+  #   applied_at: "2026-05-01T10:00:00+08:00"
+  #   description: "灰度测试版本"
+
 # ============================================================
 # 上游服务配置
 # ============================================================
@@ -128,6 +177,18 @@ upstreams:
   #     interval_secs: 5
   #     # 连接超时阈值（秒，默认 3）
   #     timeout_secs: 3
+
+  # 灰度发布配套上游服务示例
+  # user-service-v1:
+  #   algorithm: round_robin
+  #   nodes:
+  #     - addr: "127.0.0.1:8081"
+  #       weight: 1
+  # user-service-v2:
+  #   algorithm: round_robin
+  #   nodes:
+  #     - addr: "127.0.0.1:8091"
+  #       weight: 1
 
 # ============================================================
 # 限流配置（可选，整节可删除以禁用限流）
