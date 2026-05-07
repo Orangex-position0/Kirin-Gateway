@@ -62,9 +62,12 @@ server:
 | `applicant`   | string   | 是  | —            | 申请人                                        |
 | `applied_at`  | string   | 是  | —            | 申请时间（ISO 8601 格式）                          |
 | `description` | string   | 是  | —            | 接口场景说明                                     |
-| `is_auth`     | bool     | 否  | `false`      | 是否需要 JWT 认证                                |
+| `is_auth`       | bool                | 否  | `false`      | 是否需要 JWT 认证                                |
+| `canary`        | CanaryConfig        | 否  | —            | 灰度发布配置                                     |
+| `ip_whitelist`  | string[]            | 否  | —            | IP 白名单（CIDR 或精确 IP），仅允许列表中的 IP 访问      |
+| `ip_blacklist`  | string[]            | 否  | —            | IP 黑名单（CIDR 或精确 IP），拒绝列表中的 IP 访问      |
 
-> `path` 和 `path_prefix` 二选一，取决于 `match_type`。
+> `path` 和 `path_prefix` 二选一，取决于 `match_type`。白名单优先级高于黑名单。
 
 ```yaml
 routes:
@@ -90,10 +93,66 @@ routes:
     methods: ["GET", "POST"]
     upstream: admin-service
     is_auth: true
+    ip_whitelist: ["10.0.0.0/8", "192.168.1.100"]
     applicant: "developer"
     applied_at: "2026-04-22T00:00:00+08:00"
     description: "管理后台接口"
+
+  - route_id: "beta-route"
+    path: /api/users
+    match_type: exact
+    upstream: user-service-beta
+    canary:
+      weight: 20
+      match_rules:
+        - type: header
+          key: X-Canary
+          value: "true"
+      stick: cookie
+      sticky_cookie:
+        name: "kirin_canary"
+        path: "/"
+        max_age: 3600
+    applicant: "developer"
+    applied_at: "2026-04-22T00:00:00+08:00"
+    description: "用户服务灰度版本"
 ```
+
+### canary — 灰度发布配置
+
+同一 `path` 下配置多条路由时，通过 `canary` 控制灰度流量分配。
+
+灰度优先级：**条件匹配 > Cookie Sticky > IP Hash / 权重 > 兜底（无 canary 的路由）**。
+
+| 字段            | 类型               | 必填 | 默认值  | 说明                                      |
+|---------------|------------------|----|------|-----------------------------------------|
+| `weight`      | u8               | 是  | —    | 流量权重百分比（0-100），多条路由的权重累加后按区间分配            |
+| `match_rules` | CanaryMatchRule[] | 否  | `[]` | 条件匹配规则，匹配成功的请求直接路由到此版本                  |
+| `stick`       | string           | 否  | —    | 会话一致性策略：`ip_hash` / `cookie`            |
+| `sticky_cookie` | StickyCookieConfig | 否  | —    | Cookie Sticky Session 配置，`stick: cookie` 时生效 |
+
+### CanaryMatchRule
+
+| 字段     | 类型     | 必填 | 说明                                        |
+|--------|--------|----|-------------------------------------------|
+| `type` | string | 是  | 匹配来源：`header` / `cookie` / `query`        |
+| `key`  | string | 是  | Header / Cookie / Query 参数的 key            |
+| `value` | string | 是  | 期望的值（精确匹配）                                 |
+
+### StickyCookieConfig
+
+| 字段        | 类型     | 必填 | 默认值             | 说明                   |
+|-----------|--------|----|-----------------|----------------------|
+| `name`    | string | 否  | `"kirin_canary"` | Cookie 名称             |
+| `path`    | string | 否  | `"/"`            | Cookie Path 属性        |
+| `max_age` | u64    | 否  | `3600`           | Cookie 过期时间（秒）        |
+
+### IP 过滤说明
+
+- `ip_whitelist` 和 `ip_blacklist` 支持 CIDR 格式（如 `10.0.0.0/8`）和精确 IP（如 `192.168.1.100`）
+- 同时配置时白名单优先：命中白名单则放行，否则检查黑名单
+- 仅配置黑名单时，未命中黑名单的请求放行
+- IP 过滤在路由匹配之后、Filter Chain 之前执行
 
 ### match_type 说明
 
