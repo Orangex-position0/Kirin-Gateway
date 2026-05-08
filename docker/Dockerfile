@@ -7,7 +7,7 @@ RUN cargo install cargo-chef
 WORKDIR /app
 
 FROM chef AS planner
-COPY .. .
+COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # ============================================
@@ -16,7 +16,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
-COPY .. .
+COPY . .
 RUN cargo build --release && strip target/release/kirin-gw
 
 # ============================================
@@ -25,7 +25,7 @@ RUN cargo build --release && strip target/release/kirin-gw
 FROM gcr.io/distroless/cc-debian12
 WORKDIR /app
 COPY --from=builder /app/target/release/kirin-gw /app/kirin-gw
-COPY ../config.yaml /etc/kirin/config.yaml
+COPY config.yaml /etc/kirin/config.yaml
 USER nonroot:nonroot
 EXPOSE 6188 6189 8080 9100 7189
 ENTRYPOINT ["/app/kirin-gw", "/etc/kirin/config.yaml"]
