@@ -1,6 +1,6 @@
 [package]
 name = "kirin-gateway"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [[bin]]
@@ -32,3 +32,8 @@ ipnet = "2.11"
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 tempfile = "3"
+serial_test = "3"
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"

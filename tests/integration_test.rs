@@ -9,6 +9,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
+use serial_test::serial;
 use tokio::net::TcpListener;
 
 // === Mock 上游服务 ===
@@ -326,6 +327,7 @@ pub fn start_gateway(config_path: &str, gateway_port: u16) -> std::process::Chil
 
 /// 验证不同路径被路由到正确的上游服务
 #[test]
+#[serial]
 fn test_route_to_correct_upstream() {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -397,6 +399,7 @@ fn test_route_to_correct_upstream() {
 
 /// 验证 HeaderMiddleware 在请求中注入 X-Gateway 头，在响应中注入 X-Powered-By 头
 #[test]
+#[serial]
 fn test_middleware_injects_headers() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mock_addr, mock_shutdown) = rt.block_on(start_mock_upstream());
@@ -433,6 +436,7 @@ fn test_middleware_injects_headers() {
 
 /// 验证令牌桶耗尽后返回 429
 #[test]
+#[serial]
 fn test_rate_limit_returns_429() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mock_addr, mock_shutdown) = rt.block_on(start_mock_upstream());
@@ -473,6 +477,7 @@ fn test_rate_limit_returns_429() {
 
 /// 验证无匹配路由时 Pingora 返回 502
 #[test]
+#[serial]
 fn test_no_route_returns_502() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mock_addr, mock_shutdown) = rt.block_on(start_mock_upstream());
@@ -503,6 +508,7 @@ fn test_no_route_returns_502() {
 
 /// 验证多节点上游是否轮询分布
 #[test]
+#[serial]
 fn test_round_robin_distribution() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (addr1, shutdown1) = rt.block_on(start_mock_upstream_with_id("node-1".to_string()));
@@ -557,6 +563,7 @@ fn test_round_robin_distribution() {
 
 /// 验证前缀路由匹配能正确转发请求到上游
 #[test]
+#[serial]
 fn test_prefix_route_matching() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mock_addr, mock_shutdown) = rt.block_on(start_mock_upstream());
@@ -605,6 +612,7 @@ fn test_prefix_route_matching() {
 
 /// 验证精确路由和前缀路由共存时精确路由优先
 #[test]
+#[serial]
 fn test_exact_and_prefix_route_coexistence() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (user_addr, user_shutdown) = rt.block_on(start_mock_upstream());
@@ -671,6 +679,7 @@ fn test_exact_and_prefix_route_coexistence() {
 
 /// 验证配置热重载后新路由生效
 #[test]
+#[serial]
 fn test_config_hot_reload() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (user_addr, user_shutdown) = rt.block_on(start_mock_upstream());
