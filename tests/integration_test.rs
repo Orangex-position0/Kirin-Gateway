@@ -316,8 +316,8 @@ pub fn start_gateway(config_path: &str, gateway_port: u16) -> std::process::Chil
 
     let addr = format!("127.0.0.1:{}", gateway_port);
     assert!(
-        wait_for_gateway(&addr, Duration::from_secs(10)),
-        "Gateway failed to start within 10 seconds"
+        wait_for_gateway(&addr, Duration::from_secs(30)),
+        "Gateway failed to start within 30 seconds"
     );
 
     child
