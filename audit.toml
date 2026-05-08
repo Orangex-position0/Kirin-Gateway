@@ -1,0 +1,6 @@
+[advisories]
+ignore = [
+    # protobuf 2.28.0 — 传递依赖，经 prometheus 0.13.4 → pingora 引入
+    # prometheus 尚未迁移至 protobuf 3.x，无法从本项目侧修复
+    "RUSTSEC-2024-0437",
+]
