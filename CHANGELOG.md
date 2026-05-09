@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Point release workflow to docker/Dockerfile and fix COPY paths
 - Release workflow Dockerfile path, release profile, and updated example workflow
 - Update transitive deps and add audit.toml to ignore unfixable protobuf advisory
+- Move audit.toml to .cargo/ and ignore all unfixable transitive advisories
 
 ### <!-- 2 -->⚡ Performance
 
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Rewrite architecture docs to reflect control/data plane separation
 - Sync routing and observability docs with v0.2.0 code changes
+- Update CHANGELOG.md for v0.2.0
 - Update CHANGELOG.md for v0.2.0
 
 ### <!-- 7 -->🧹 Miscellaneous
