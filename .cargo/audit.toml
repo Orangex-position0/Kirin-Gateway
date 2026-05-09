@@ -1,0 +1,15 @@
+[advisories]
+ignore = [
+    # protobuf 2.28.0 — 传递依赖，经 prometheus 0.13.4 → pingora 引入
+    # prometheus 尚未迁移至 protobuf 3.x，无法从本项目侧修复
+    "RUSTSEC-2024-0437",
+    # daemonize 0.5.0 — 传递依赖，经 pingora-core 引入
+    # upstream 已标记 unmaintained，等待 Pingora 替换该依赖
+    "RUSTSEC-2025-0069",
+    # derivative 2.2.0 — 传递依赖，经 pingora-core/pingora-load-balancing 引入
+    # upstream 已标记 unmaintained，等待 Pingora 迁移至 derive_more 或宏展开
+    "RUSTSEC-2024-0388",
+    # instant 0.1.13 — 传递依赖，经 notify-types 引入
+    # std::time 在所有主流平台已足够稳定，此 crate 不再维护
+    "RUSTSEC-2024-0384",
+]
