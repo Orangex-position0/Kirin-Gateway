@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-05-08
+## [0.2.0] - 2026-05-09
 
 ### <!-- 0 -->🚀 Features
 
@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Increase integration test timeout and pre-build binary in CI
 - Point release workflow to docker/Dockerfile and fix COPY paths
 - Release workflow Dockerfile path, release profile, and updated example workflow
+- Update transitive deps and add audit.toml to ignore unfixable protobuf advisory
 
 ### <!-- 2 -->⚡ Performance
 
@@ -35,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Rewrite architecture docs to reflect control/data plane separation
 - Sync routing and observability docs with v0.2.0 code changes
+- Update CHANGELOG.md for v0.2.0
 
 ### <!-- 7 -->🧹 Miscellaneous
 
